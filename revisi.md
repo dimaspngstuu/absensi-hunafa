@@ -1,8 +1,49 @@
-# REVISI & PENYEMPURNAAN SISTEM: PERBAIKAN AKSI API & OPTIMASI PERFORMA ANTI-LAG (v2.16.0)
+# REVISI & PENYEMPURNAAN SISTEM: PEMANTAUAN PRESENSI LIVE & API ENGINE (v2.17.0)
 ## Projek: Al Hunafa Attendance
 Dokumen Rencana & Catatan Eksekusi Revisi Berkelanjutan (by ZettBOT).
 
-Status: **SEDANG DITERAPKAN (v2.16.0 - 29 Oktober 2026)**
+Status: **SELESAI DITERAPKAN (v2.17.0 - 29 Oktober 2026)**
+
+---
+
+### 1. Masalah & Kebutuhan Pengguna
+1. **Tampilan Pemantauan Presensi Hari Ini Kurang Menarik**:
+   - Tampilan pemantauan kehadiran pegawai untuk akun Administrator di Beranda terkesan kaku, flat, dan monoton menyerupai tabel teks biasa (`Check In | Check Out | Total Jam`).
+   - Tidak ada identitas visual pegawai (avatar inisial / warna identitas profil).
+   - Tidak ada ringkasan KPI cepat di bagian atas (misal berapa orang yang sedang aktif bekerja vs yang sudah selesai/pulang).
+   - Tidak ada fitur pencarian instan maupun filter status (*Semua*, *Sedang Kerja*, *Selesai*).
+   - Tidak ada indikasi durasi waktu kerja yang berjalan (*live elapsed duration*).
+
+2. **Penyempurnaan URL Web App & Handler Error Jaringan**:
+   - URL Web App dinormalisasi secara otomatis jika pengguna tanpa sengaja menempel link `/dev` atau terpotong tanpa `/exec`.
+   - Error jaringan (*Failed to fetch*) diberikan keterangan solutif agar pengguna langsung mengetahui pengaturan hak akses di Google Apps Script (*Anyone / Siapa saja*).
+
+---
+
+### 2. Solusi Rekayasa UI/UX Modern (SOP ZettBOT)
+1. **Redesign Total Kartu Pegawai (*Modern Enterprise Card Design*)**:
+   - **Avatar Inisial Bergradasi Dinamis**: Setiap pegawai memiliki avatar inisial (misal: "Saiful Majid" -> "SM") dengan palet gradasi warna modern (Emerald, Indigo, Cyan, Amber, Rose, Violet, Blue, Teal) yang di-generate konsisten.
+   - **Live Pulsing Status Badge**: Status "Sedang Kerja" dilengkapi dot hijau berdenyut (*pulse animation*) dan soft emerald badge, sedangkan "Selesai" dilengkapi ikon checkmark biru muda.
+   - **Mini Metric Grid (3 Kolom Modern)**:
+     - Check In: Waktu kedatangan + status kehadiran (Hadir/Tepat Waktu).
+     - Check Out: Waktu pulang resmi atau label status *Belum Pulang*.
+     - Durasi Kerja: Menghitung secara otomatis waktu riil yang telah dihabiskan sejak check-in (*Live Elapsed Duration*, misal: "7j 47m (Live Berjalan)") atau total jam kerja resmi jika sudah check-out.
+
+2. **Interactive Quick Filter Chips (Pill Bar)**:
+   - Tombol tab filter instan di atas kartu: **Semua**, **Sedang Kerja**, dan **Selesai**, masing-masing menampilkan counter jumlah pegawai secara live (*real-time count*).
+   - Admin dapat beralih filter dalam 1 klik tanpa reload halaman.
+
+3. **Instant Live Search Box**:
+   - Kolom pencarian elegan terintegrasi: Admin dapat mengetik nama atau ID karyawan untuk menyaring daftar secara seketika (*instant filtering as you type*).
+
+---
+
+### 3. File yang Dimodifikasi
+- [index.html](file:///c:/Users/dimas/.gemini/antigravity-ide/project/absensi_pegawai/index.html): Penambahan struktur Filter Chips dan Search Box pemantauan admin.
+- [style.css](file:///c:/Users/dimas/.gemini/antigravity-ide/project/absensi_pegawai/style.css): Desain visual baru kartu pegawai, avatar inisial, badge pulsing, dan metric grid.
+- [css.html](file:///c:/Users/dimas/.gemini/antigravity-ide/project/absensi_pegawai/css.html): Sinkronisasi CSS untuk Google Apps Script Web App bawaan.
+- [app.js](file:///c:/Users/dimas/.gemini/antigravity-ide/project/absensi_pegawai/app.js): Logika rendering dinamis, live duration counter, pencarian nama, dan filter status.
+- [js.html](file:///c:/Users/dimas/.gemini/antigravity-ide/project/absensi_pegawai/js.html): Sinkronisasi controller JavaScript untuk Apps Script template.
 
 ---
 

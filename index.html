@@ -134,7 +134,37 @@
               Pegawai</span>
           </div>
 
-          <div class="history-list" id="adminMonitoringList">
+          <!-- Quick Stats Filter Chips -->
+          <div class="admin-monitor-stats-bar" id="adminMonitorStatsBar">
+            <button type="button" class="monitor-chip active" id="chipFilterAll" onclick="setAdminMonitorFilter('all')">
+              <span class="chip-dot-all"></span>
+              <span>Semua</span>
+              <strong id="countAllPegawai">0</strong>
+            </button>
+            <button type="button" class="monitor-chip" id="chipFilterWorking" onclick="setAdminMonitorFilter('working')">
+              <span class="chip-dot-green"></span>
+              <span>Sedang Kerja</span>
+              <strong id="countWorkingPegawai">0</strong>
+            </button>
+            <button type="button" class="monitor-chip" id="chipFilterDone" onclick="setAdminMonitorFilter('done')">
+              <span class="chip-dot-blue"></span>
+              <span>Selesai</span>
+              <strong id="countDonePegawai">0</strong>
+            </button>
+          </div>
+
+          <!-- Sleek Search Input -->
+          <div class="admin-search-box" id="adminMonitorSearchBox">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+              stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input type="text" id="adminMonitorSearchInput" placeholder="Cari nama pegawai..."
+              oninput="handleAdminMonitorSearch(this.value)">
+          </div>
+
+          <div class="admin-monitoring-cards-list" id="adminMonitoringList">
             <!-- Di-render dinamis oleh JavaScript jika login sebagai Admin -->
           </div>
         </div>

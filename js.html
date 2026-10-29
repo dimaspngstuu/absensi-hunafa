@@ -350,6 +350,181 @@
     }
   }
 
+  let adminMonitorFilter = "all";
+  let adminMonitorSearchQuery = "";
+
+  function setAdminMonitorFilter(filterType) {
+    adminMonitorFilter = filterType;
+    ["all", "working", "done"].forEach(function (type) {
+      const chip = document.getElementById("chipFilter" + type.charAt(0).toUpperCase() + type.slice(1));
+      if (chip) {
+        if (type === filterType) chip.classList.add("active");
+        else chip.classList.remove("active");
+      }
+    });
+    renderAdminMonitoringView();
+  }
+
+  function handleAdminMonitorSearch(val) {
+    adminMonitorSearchQuery = (val || "").trim().toLowerCase();
+    renderAdminMonitoringView();
+  }
+
+  function getEmployeeInitials(name) {
+    if (!name) return "PG";
+    const clean = name.trim().replace(/^(H\.|Hj\.|Drs\.|Dr\.|Ir\.|M\.)\s*/i, "");
+    const parts = clean.split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return clean.substring(0, 2).toUpperCase();
+  }
+
+  function getAvatarGradient(name) {
+    const gradients = [
+      "linear-gradient(135deg, #059669, #10b981)",
+      "linear-gradient(135deg, #4f46e5, #6366f1)",
+      "linear-gradient(135deg, #0891b2, #06b6d4)",
+      "linear-gradient(135deg, #d97706, #f59e0b)",
+      "linear-gradient(135deg, #e11d48, #f43f5e)",
+      "linear-gradient(135deg, #7c3aed, #8b5cf6)",
+      "linear-gradient(135deg, #2563eb, #3b82f6)",
+      "linear-gradient(135deg, #0d9488, #14b8a6)"
+    ];
+    let hash = 0;
+    for (let i = 0; i < (name || "").length; i++) {
+      hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const index = Math.abs(hash) % gradients.length;
+    return gradients[index];
+  }
+
+  function calculateLiveDuration(inTimeStr) {
+    if (!inTimeStr || inTimeStr === "-") return "-";
+    const parts = inTimeStr.split(":");
+    if (parts.length < 2) return "-";
+    const now = new Date();
+    const inDate = new Date();
+    inDate.setHours(parseInt(parts[0], 10), parseInt(parts[1], 10), parseInt(parts[2] || "0", 10), 0);
+    let diffMs = now - inDate;
+    if (diffMs < 0) diffMs = 0;
+    const totalMin = Math.floor(diffMs / 60000);
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
+    if (h === 0) return m + " menit";
+    return h + "j " + m + "m";
+  }
+
+  function renderAdminMonitoringView() {
+    const adminSection = document.getElementById("adminMonitoringSection");
+    const adminList = document.getElementById("adminMonitoringList");
+    const adminBadge = document.getElementById("adminMonitoringBadge");
+
+    if (!adminSection || !adminList) return;
+    if (!AppState.currentUser || AppState.currentUser.role !== "Admin") {
+      adminSection.style.display = "none";
+      return;
+    }
+
+    adminSection.style.display = "block";
+    const allLogs = AppState.todayAllEmployeesLog || [];
+
+    const workingLogs = allLogs.filter(function (l) { return !l.checkOutTime || l.checkOutTime === "-"; });
+    const doneLogs = allLogs.filter(function (l) { return l.checkOutTime && l.checkOutTime !== "-"; });
+
+    // Update counters pada header & filter chips
+    if (adminBadge) adminBadge.innerText = allLogs.length + " Pegawai";
+    const cntAll = document.getElementById("countAllPegawai");
+    const cntWork = document.getElementById("countWorkingPegawai");
+    const cntDone = document.getElementById("countDonePegawai");
+    if (cntAll) cntAll.innerText = allLogs.length;
+    if (cntWork) cntWork.innerText = workingLogs.length;
+    if (cntDone) cntDone.innerText = doneLogs.length;
+
+    // Filter berdasarkan kategori
+    let filtered = allLogs;
+    if (adminMonitorFilter === "working") {
+      filtered = workingLogs;
+    } else if (adminMonitorFilter === "done") {
+      filtered = doneLogs;
+    }
+
+    // Filter berdasarkan pencarian nama atau ID
+    if (adminMonitorSearchQuery) {
+      filtered = filtered.filter(function (l) {
+        const name = (l.nama || "").toLowerCase();
+        const id = (l.idKaryawan || "").toLowerCase();
+        return name.indexOf(adminMonitorSearchQuery) !== -1 || id.indexOf(adminMonitorSearchQuery) !== -1;
+      });
+    }
+
+    if (allLogs.length === 0) {
+      adminList.innerHTML = '<div style="text-align:center; padding:24px 16px; font-size:13px; color:var(--text-sub); background:var(--card-bg); border-radius:var(--radius-lg); border:1px dashed var(--border-color);"><div style="font-size:24px; margin-bottom:6px;">📋</div>Belum ada pegawai yang melakukan presensi hari ini.</div>';
+      return;
+    }
+
+    if (filtered.length === 0) {
+      adminList.innerHTML = '<div style="text-align:center; padding:20px 16px; font-size:12.5px; color:var(--text-sub); background:var(--card-bg); border-radius:var(--radius-lg); border:1px dashed var(--border-color);">Tidak ditemukan data pegawai untuk filter ini.</div>';
+      return;
+    }
+
+    let html = "";
+    filtered.forEach(function (log) {
+      const hasCheckedOut = log.checkOutTime && log.checkOutTime !== "-";
+      const initials = getEmployeeInitials(log.nama);
+      const gradient = getAvatarGradient(log.nama);
+      const idBadgeText = log.idKaryawan ? log.idKaryawan : "Pegawai";
+      const inTimeDisplay = log.checkInTime || "--:--";
+      const outTimeDisplay = hasCheckedOut ? log.checkOutTime : "--:--:--";
+
+      let durationDisplay = "-";
+      if (hasCheckedOut) {
+        durationDisplay = log.totalHours || "Selesai";
+      } else {
+        durationDisplay = calculateLiveDuration(log.checkInTime);
+      }
+
+      const statusBadgeHtml = hasCheckedOut
+        ? '<div class="pegawai-status-badge badge-selesai"><span class="status-icon-check">✓</span> Selesai</div>'
+        : '<div class="pegawai-status-badge badge-kerja"><span class="status-pulse-dot"></span> Sedang Kerja</div>';
+
+      html += '<div class="admin-pegawai-card">' +
+        '<div class="pegawai-card-top">' +
+          '<div class="pegawai-profile-group">' +
+            '<div class="pegawai-avatar" style="background:' + gradient + ';">' + initials + '</div>' +
+            '<div class="pegawai-info">' +
+              '<div class="pegawai-name">' + (log.nama || "Pegawai") + '</div>' +
+              '<div class="pegawai-sub">' +
+                '<span class="pegawai-id-badge">' + idBadgeText + '</span>' +
+                '<span class="pegawai-time-hint">Masuk ' + inTimeDisplay + '</span>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+          statusBadgeHtml +
+        '</div>' +
+        '<div class="pegawai-metrics-grid">' +
+          '<div class="pegawai-metric-item">' +
+            '<div class="metric-label">Check In</div>' +
+            '<div class="metric-value text-green">' + inTimeDisplay + '</div>' +
+            '<div class="metric-sub">' + (log.checkInStatus || "Hadir") + '</div>' +
+          '</div>' +
+          '<div class="pegawai-metric-item">' +
+            '<div class="metric-label">Check Out</div>' +
+            '<div class="metric-value ' + (hasCheckedOut ? 'text-blue' : 'text-muted') + '">' + outTimeDisplay + '</div>' +
+            '<div class="metric-sub">' + (hasCheckedOut ? "Pulang" : "Belum Pulang") + '</div>' +
+          '</div>' +
+          '<div class="pegawai-metric-item">' +
+            '<div class="metric-label">Durasi Kerja</div>' +
+            '<div class="metric-value text-dark">' + durationDisplay + '</div>' +
+            '<div class="metric-sub">' + (hasCheckedOut ? "Total Jam" : "Live Berjalan") + '</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    });
+
+    adminList.innerHTML = html;
+  }
+
   function renderDashboardData() {
     const userHeader = document.getElementById("userNameHeader");
     if (userHeader) userHeader.innerText = AppState.currentUser ? AppState.currentUser.nama : "-";
@@ -399,58 +574,10 @@
       if (outBadge) outBadge.classList.add("muted");
     }
 
-    // Khusus Role Admin: Render Pemantauan Presensi Pegawai Hari Ini di Beranda
-    const adminSection = document.getElementById("adminMonitoringSection");
-    const adminList = document.getElementById("adminMonitoringList");
-    const adminBadge = document.getElementById("adminMonitoringBadge");
+  // Khusus Role Admin: Render Pemantauan Presensi Pegawai Hari Ini di Beranda
+  renderAdminMonitoringView();
 
-    if (adminSection && adminList) {
-      if (AppState.currentUser && AppState.currentUser.role === "Admin") {
-        adminSection.style.display = "block";
-        const logs = AppState.todayAllEmployeesLog || [];
-        if (adminBadge) adminBadge.innerText = logs.length + " Pegawai";
-
-        if (logs.length === 0) {
-          adminList.innerHTML = '<div style="text-align:center; padding:18px; font-size:13px; color:var(--text-sub); background:var(--card-bg); border-radius:var(--radius-md); border:1px dashed var(--primary-border);">Belum ada pegawai yang melakukan presensi hari ini.</div>';
-        } else {
-          let html = "";
-          logs.forEach(function (log) {
-            const hasCheckedOut = log.checkOutTime && log.checkOutTime !== "-";
-            const statusPill = hasCheckedOut
-              ? '<span style="font-size:11px; font-weight:700; color:#2e7d32; background:#e8f5e9; padding:2px 8px; border-radius:999px;">Selesai (' + (log.totalHours || "-") + ')</span>'
-              : '<span style="font-size:11px; font-weight:700; color:#155724; background:#d4edda; padding:2px 8px; border-radius:999px;">Sedang Kerja</span>';
-
-            html += '<div class="history-card" style="padding:12px 14px; margin-bottom:8px;">' +
-              '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">' +
-              '<div style="font-weight:700; font-size:14px; color:var(--text-main);">' + (log.nama || "Pegawai") + '</div>' +
-              statusPill +
-              '</div>' +
-              '<div class="history-main-row" style="padding-top:4px;">' +
-              '<div class="time-columns" style="width:100%;">' +
-              '<div class="time-col">' +
-              '<div class="time-val" style="font-size:13px;">' + (log.checkInTime || "-") + '</div>' +
-              '<div class="time-lbl">Check In</div>' +
-              '</div>' +
-              '<div class="time-col">' +
-              '<div class="time-val" style="font-size:13px;">' + (log.checkOutTime || "-") + '</div>' +
-              '<div class="time-lbl">Check Out</div>' +
-              '</div>' +
-              '<div class="time-col">' +
-              '<div class="time-val" style="font-size:13px;">' + (log.totalHours || "-") + '</div>' +
-              '<div class="time-lbl">Total Jam</div>' +
-              '</div>' +
-              '</div>' +
-              '</div>' +
-              '</div>';
-          });
-          adminList.innerHTML = html;
-        }
-      } else {
-        adminSection.style.display = "none";
-      }
-    }
-
-    // Khusus Role Admin: Sembunyikan seluruh modul absen pribadi di Beranda & tombol kamera navigasi
+  // Khusus Role Admin: Sembunyikan seluruh modul absen pribadi di Beranda & tombol kamera navigasi
     const isAdmin = (AppState.currentUser && AppState.currentUser.role === "Admin");
     const homeMetricsGrid = document.getElementById("homeMetricsGrid");
     const workDurationBanner = document.getElementById("workDurationBanner");
