@@ -2208,7 +2208,47 @@ function setAdminLeaveFilter(filterType) {
   }
 }
 
+function calculateOvertimeHours() {
+  const startEl = document.getElementById("overtimeStartTime");
+  const endEl = document.getElementById("overtimeEndTime");
+  const displayEl = document.getElementById("overtimeTotalDisplay");
+  if (!startEl || !endEl || !displayEl) return { valid: false, text: "-", decimalHours: "0" };
+
+  const startVal = startEl.value || "17:00";
+  const endVal = endEl.value || "20:00";
+
+  const sParts = startVal.split(":");
+  const eParts = endVal.split(":");
+  const startMin = parseInt(sParts[0], 10) * 60 + parseInt(sParts[1], 10);
+  const endMin = parseInt(eParts[0], 10) * 60 + parseInt(eParts[1], 10);
+
+  let diffMin = endMin - startMin;
+  if (diffMin <= 0) {
+    displayEl.innerHTML = '<span style="color: #dc2626; font-weight: 700;">Jam selesai harus melebihi jam mulai</span>';
+    return { valid: false, text: "Tidak valid", decimalHours: "0" };
+  }
+
+  const hours = Math.floor(diffMin / 60);
+  const mins = diffMin % 60;
+  const decimalVal = (diffMin / 60).toFixed(1).replace(/\.0$/, "");
+  const durationText = hours + " Jam" + (mins > 0 ? " " + mins + " Menit" : "");
+  const humanText = durationText + " (" + decimalVal + " Jam)";
+
+  displayEl.innerHTML = humanText;
+  return {
+    valid: true,
+    startTime: startVal,
+    endTime: endVal,
+    durationText: durationText,
+    decimalHours: decimalVal,
+    humanText: humanText
+  };
+}
+
 function handleLeaveTypeChange(val) {
+  const lblStartDate = document.getElementById("lblStartDate");
+  const groupEndDate = document.getElementById("groupEndDate");
+  const overtimeSection = document.getElementById("overtimeHoursSection");
   const lblReason = document.getElementById("lblReason");
   const leaveReason = document.getElementById("leaveReason");
   const lblProof = document.getElementById("lblProofAttachment");
@@ -2216,12 +2256,21 @@ function handleLeaveTypeChange(val) {
   const btnSubmit = document.getElementById("btnSubmitLeave");
 
   if (val === "Lembur") {
+    if (lblStartDate) lblStartDate.innerText = "Tanggal Lembur";
+    if (groupEndDate) groupEndDate.style.display = "none";
+    if (overtimeSection) {
+      overtimeSection.style.display = "block";
+      calculateOvertimeHours();
+    }
     if (lblReason) lblReason.innerText = "Keterangan / Rincian Tugas Lembur";
     if (leaveReason) leaveReason.placeholder = "Jelaskan rincian tugas lembur (misal: Persiapan PPDB, Piket Acara Malam s/d 20:00)...";
     if (lblProof) lblProof.innerText = "Lampiran Bukti (Surat Tugas / Foto Kegiatan Lembur)";
     if (promptTitle) promptTitle.innerText = "Pilih Foto Surat Tugas / Foto Kegiatan";
     if (btnSubmit) btnSubmit.innerText = "Kirim Pengajuan Lembur";
   } else {
+    if (lblStartDate) lblStartDate.innerText = "Tanggal Mulai";
+    if (groupEndDate) groupEndDate.style.display = "block";
+    if (overtimeSection) overtimeSection.style.display = "none";
     if (lblReason) lblReason.innerText = "Keterangan / Alasan";
     if (leaveReason) leaveReason.placeholder = "Tuliskan keterangan detail...";
     if (lblProof) lblProof.innerText = "Lampiran Bukti (Surat Dokter / Foto Pendukung)";
@@ -2284,7 +2333,6 @@ function fetchAndRenderAdminLeaveRequests(force) {
       if (item.jenis === "Sakit") pillClass = "pill-sakit";
       if (item.jenis === "Cuti") pillClass = "pill-cuti";
       if (item.jenis === "Lembur") pillClass = "pill-lembur";
-      if (item.jenis === "Lembur") pillClass = "pill-lembur";
 
       let statusBadge = "";
       if (item.status === "Disetujui") {
@@ -2309,6 +2357,19 @@ function fetchAndRenderAdminLeaveRequests(force) {
           '</div>';
       }
 
+      let overtimeChip = "";
+      let cleanReason = item.alasan || "Tanpa keterangan";
+      let dateRangeLabel = (item.tglMulai || "-") + " s/d " + (item.tglSelesai || "-");
+
+      if (item.jenis === "Lembur") {
+        dateRangeLabel = (item.tglMulai ? item.tglMulai.split(" ")[0] : "-");
+        const match = cleanReason.match(/\[⏰\s*([^\]]+)\]/);
+        if (match && match[1]) {
+          overtimeChip = '<div class="overtime-time-chip">⏰ ' + match[1] + '</div>';
+          cleanReason = cleanReason.replace(/\[⏰\s*[^\]]+\]\s*/, "");
+        }
+      }
+
       html += '<div class="leave-approval-card" id="leaveCard-' + item.idPengajuan + '">' +
         '<div class="leave-card-header">' +
         '<div>' +
@@ -2320,8 +2381,9 @@ function fetchAndRenderAdminLeaveRequests(force) {
         statusBadge +
         '</div>' +
         '</div>' +
-        '<div class="leave-date-range">📅 ' + (item.tglMulai || "-") + ' s/d ' + (item.tglSelesai || "-") + '</div>' +
-        '<div class="leave-reason-text">"' + (item.alasan || "Tanpa keterangan") + '"</div>' +
+        '<div class="leave-date-range">📅 ' + (item.jenis === "Lembur" ? "Tanggal: " + dateRangeLabel : dateRangeLabel) + '</div>' +
+        overtimeChip +
+        '<div class="leave-reason-text">"' + cleanReason + '"</div>' +
         (proofButton ? '<div style="margin-top: 6px;">' + proofButton + '</div>' : '') +
         actionButtons +
         '</div>';
@@ -2432,13 +2494,27 @@ function fetchAndRenderEmployeeLeaveHistory(force) {
         proofButton = '<button type="button" class="btn-view-proof" onclick="openProofViewerModal(\'' + item.bukti + '\', \'Bukti ' + (item.jenis || "Izin") + '\')">📄 Lihat Bukti Surat</button>';
       }
 
+      let overtimeChip = "";
+      let cleanReason = item.alasan || "-";
+      let dateRangeLabel = (item.tglMulai || "-") + " s/d " + (item.tglSelesai || "-");
+
+      if (item.jenis === "Lembur") {
+        dateRangeLabel = (item.tglMulai ? item.tglMulai.split(" ")[0] : "-");
+        const match = cleanReason.match(/\[⏰\s*([^\]]+)\]/);
+        if (match && match[1]) {
+          overtimeChip = '<div class="overtime-time-chip">⏰ ' + match[1] + '</div>';
+          cleanReason = cleanReason.replace(/\[⏰\s*[^\]]+\]\s*/, "");
+        }
+      }
+
       html += '<div class="leave-approval-card">' +
         '<div class="leave-card-header">' +
         '<span class="leave-type-pill ' + pillClass + '">' + (item.jenis || "Izin") + '</span>' +
         statusBadge +
         '</div>' +
-        '<div class="leave-date-range">📅 ' + (item.tglMulai || "-") + ' s/d ' + (item.tglSelesai || "-") + '</div>' +
-        '<div style="font-size: 12.5px; color: #475569; margin-top: 4px;">"' + (item.alasan || "-") + '"</div>' +
+        '<div class="leave-date-range">📅 ' + (item.jenis === "Lembur" ? "Tanggal: " + dateRangeLabel : dateRangeLabel) + '</div>' +
+        overtimeChip +
+        '<div style="font-size: 12.5px; color: #475569; margin-top: 4px;">"' + cleanReason + '"</div>' +
         (proofButton ? '<div style="margin-top: 8px;">' + proofButton + '</div>' : '') +
         '</div>';
     });
@@ -2478,10 +2554,20 @@ function fetchAndRenderEmployeeLeaveHistory(force) {
 function handleLeaveSubmit(e) {
   e.preventDefault();
   const jenis = document.getElementById("leaveType").value;
-  const tglMulai = document.getElementById("leaveStartDate").value;
-  const tglSelesai = document.getElementById("leaveEndDate").value;
-  const alasan = document.getElementById("leaveReason").value;
+  let tglMulai = document.getElementById("leaveStartDate").value;
+  let tglSelesai = document.getElementById("leaveEndDate").value;
+  let alasan = document.getElementById("leaveReason").value;
   const submitBtn = document.getElementById("btnSubmitLeave");
+
+  if (jenis === "Lembur") {
+    tglSelesai = tglMulai;
+    const ot = calculateOvertimeHours();
+    if (!ot.valid) {
+      showToast("Jam lembur tidak valid. Pastikan jam selesai melebihi jam mulai.", "error");
+      return;
+    }
+    alasan = "[⏰ " + ot.startTime + " - " + ot.endTime + " WIB • Total " + ot.decimalHours + " Jam] " + alasan;
+  }
 
   if (submitBtn) {
     submitBtn.disabled = true;

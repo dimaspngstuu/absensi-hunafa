@@ -1,8 +1,35 @@
-# REVISI & PENYEMPURNAAN SISTEM: INTEGRASI FITUR LEMBUR & APPROVAL ADMIN (v2.18.0)
+# REVISI & PENYEMPURNAAN SISTEM: KALKULASI JAM & TOTAL LEMBUR OTOMATIS (v2.19.0)
 ## Projek: Al Hunafa Attendance
 Dokumen Rencana & Catatan Eksekusi Revisi Berkelanjutan (by ZettBOT).
 
-Status: **SELESAI DITERAPKAN (v2.18.0 - 30 Oktober 2026)**
+Status: **SELESAI DITERAPKAN (v2.19.0 - 30 Oktober 2026)**
+
+---
+
+### 1. Kebutuhan Pengguna
+- **Detail Jam Lembur & Kalkulasi Total Durasi**:
+  - Pengajuan lembur memerlukan rincian waktu spesifik: **Jam Mulai Lembur** (misal: 17:00), **Jam Selesai Lembur** (misal: 20:30), dan **Total Jam Lembur Otomatis** (misal: 3.5 Jam / 3 Jam 30 Menit).
+  - Tampilan kartu di sisi Admin dan riwayat pegawai harus menampilkan rincian jam dan total jam lembur secara jelas dan mencolok agar mempermudah evaluasi persetujuan.
+
+---
+
+### 2. Solusi Rekayasa Sistem (SOP ZettBOT)
+1. **Input Jam Lembur Presisi di Formulir (`index.html`)**:
+   - Menambahkan blok input waktu khusus `#overtimeHoursSection` yang hanya muncul otomatis jika opsi **Lembur / Tugas Tambahan** dipilih.
+   - Kolom Jam Mulai dan Jam Selesai berbasis native time picker dengan validasi langsung.
+   - Badge kalkulasi live: otomatis menghitung selisih jam dan menit secara *real-time* (misal: `3 Jam 30 Menit (3.5 Jam)`).
+2. **Visualisasi Kartu Lembur Modern (`app.js`, `js.html`, `style.css`, `css.html`)**:
+   - Komponen chip visual `.overtime-time-chip` beraksen ungu: `⏰ 17:00 - 20:30 WIB • Total 3.5 Jam`.
+   - Admin dapat melihat langsung total jam lembur yang diajukan sebelum menekan tombol `✓ Terima / Setujui` atau `✕ Tolak`.
+3. **Data Storage & Kompatibilitas**:
+   - Data jam mulai, jam selesai, dan total durasi tersimpan rapi ke dalam catatan Google Sheets.
+
+---
+
+### 3. File yang Dimodifikasi
+- [index.html](file:///c:/Users/dimas/.gemini/antigravity-ide\project\absensi_pegawai\index.html): Penambahan blok waktu lembur dan widget hitung durasi otomatis.
+- [style.css](file:///c:/Users/dimas/.gemini/antigravity-ide\project\absensi_pegawai\style.css) & [css.html](file:///c:/Users/dimas/.gemini/antigravity-ide\project\absensi_pegawai\css.html): Desain chip `.overtime-time-chip`.
+- [app.js](file:///c:/Users/dimas/.gemini/antigravity-ide\project\absensi_pegawai\app.js) & [js.html](file:///c:/Users/dimas/.gemini/antigravity-ide\project\absensi_pegawai\js.html): Fungsi `calculateOvertimeHours()`, parser chip jam lembur, dan integrasi payload submit.
 
 ---
 

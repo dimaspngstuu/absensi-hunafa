@@ -323,13 +323,31 @@
                   <option value="Lembur">Lembur / Tugas Tambahan</option>
                 </select>
               </div>
-              <div class="form-group">
+              <div class="form-group" id="groupStartDate">
                 <label class="form-label" id="lblStartDate">Tanggal Mulai</label>
                 <input type="date" class="form-input" id="leaveStartDate" required>
               </div>
-              <div class="form-group">
+              <div class="form-group" id="groupEndDate">
                 <label class="form-label" id="lblEndDate">Tanggal Selesai</label>
                 <input type="date" class="form-input" id="leaveEndDate" required>
+              </div>
+
+              <!-- Overtime Hours Inputs (Otomatis Aktif Saat Memilih Lembur) -->
+              <div id="overtimeHoursSection" style="display: none; margin-bottom: 12px; background: #faf5ff; border: 1px solid #e9d5ff; border-radius: var(--radius-sm); padding: 12px;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 8px;">
+                  <div>
+                    <label class="form-label" style="font-size: 11.5px; color: #6b21a8;">Jam Mulai Lembur</label>
+                    <input type="time" class="form-input" id="overtimeStartTime" value="17:00" onchange="calculateOvertimeHours()" oninput="calculateOvertimeHours()" style="border-color: #d8b4fe;">
+                  </div>
+                  <div>
+                    <label class="form-label" style="font-size: 11.5px; color: #6b21a8;">Jam Selesai Lembur</label>
+                    <input type="time" class="form-input" id="overtimeEndTime" value="20:00" onchange="calculateOvertimeHours()" oninput="calculateOvertimeHours()" style="border-color: #d8b4fe;">
+                  </div>
+                </div>
+                <div style="display: flex; align-items: center; justify-content: space-between; font-size: 12px; background: #ffffff; padding: 8px 12px; border-radius: 8px; border: 1px solid #f3e8ff;">
+                  <span style="color: #6b21a8; font-weight: 600;">⏱️ Total Jam Lembur:</span>
+                  <span id="overtimeTotalDisplay" style="color: #581c87; font-weight: 800;">3 Jam 0 Menit (3.0 Jam)</span>
+                </div>
               </div>
               <div class="form-group">
                 <label class="form-label" id="lblReason">Keterangan / Alasan</label>
