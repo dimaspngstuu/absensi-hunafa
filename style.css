@@ -93,6 +93,7 @@ body {
   flex: 1;
   height: 100%;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   padding: clamp(6px, 1.4vh, 12px) 16px clamp(68px, 9vh, 76px) 16px;
   position: relative;
   scrollbar-width: none;
@@ -1298,20 +1299,21 @@ body {
   box-shadow: 0 2px 8px rgba(35, 55, 48, 0.08);
 }
 
-/* Views Switching */
+/* Views Switching (Hardware Accelerated) */
 .app-view {
   display: none;
+  will-change: opacity, transform;
 }
 
 .app-view.active-view {
   display: block;
-  animation: fadeIn 0.2s ease;
+  animation: fadeIn 0.16s ease-out;
 }
 
 @keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(4px);
   }
 
   to {

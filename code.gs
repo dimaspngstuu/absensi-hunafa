@@ -71,6 +71,10 @@ const COL_LEMBUR = {
  * Entry point Web App
  */
 function doGet(e) {
+  // Dukungan REST API via GET jika parameter action disertakan
+  if (e && e.parameter && e.parameter.action) {
+    return doPost(e);
+  }
   var template = HtmlService.createTemplateFromFile("index");
   return template.evaluate()
     .setTitle("Al Hunafa Attendance")
@@ -86,42 +90,59 @@ function include(filename) {
 }
 
 /**
- * Handle POST request jika diakses via webhook/fetch eksternal
+ * Handle POST request jika diakses via webhook/fetch eksternal (Universal Vercel API Bridge)
  */
 function doPost(e) {
   try {
-    var payload = JSON.parse(e.postData.contents);
-    var action = payload.action;
-    var result = { success: false, message: "Aksi tidak dikenal." };
+    var payload = {};
+    if (e && e.postData && e.postData.contents) {
+      try {
+        payload = JSON.parse(e.postData.contents);
+      } catch (errJson) {
+        payload = e.parameter || {};
+      }
+    } else if (e && e.parameter) {
+      payload = e.parameter;
+    }
+
+    var rawAction = String(payload.action || (e && e.parameter ? e.parameter.action : "") || "").trim();
+    var action = rawAction.toLowerCase();
+    var result = { success: false, message: "Aksi '" + rawAction + "' tidak dikenal di backend Google Apps Script." };
 
     if (action === "login") {
       result = apiLogin(payload.identifier || payload.email || payload.nip, payload.pin);
-    } else if (action === "getDashboard") {
+    } else if (action === "getdashboard" || action === "get_dashboard") {
       result = apiGetDashboardData(payload.token, payload.idKaryawan);
-    } else if (action === "submitPresensi") {
+    } else if (action === "getadmindashboard" || action === "get_admin_dashboard") {
+      result = apiGetAdminDashboard(payload.token);
+    } else if (action === "submitpresensi" || action === "submit_presensi") {
       result = apiSubmitPresensi(payload.token, payload);
-    } else if (action === "submitIzin") {
+    } else if (action === "submitizin" || action === "submit_izin") {
       result = apiSubmitIzin(payload.token, payload);
-    } else if (action === "updateStatusIzin") {
+    } else if (action === "updatestatusizin" || action === "update_status_izin") {
       result = apiUpdateStatusIzin(payload.token, payload.idPengajuan, payload.newStatus);
-    } else if (action === "getIzinList") {
+    } else if (action === "getizinlist" || action === "get_izin_list") {
       result = apiGetIzinList(payload.token);
-    } else if (action === "getFilteredReport") {
+    } else if (action === "getfilteredreport" || action === "get_filtered_report") {
       result = apiGetFilteredReport(payload.token, payload.startDate, payload.endDate);
-    } else if (action === "saveConfig") {
+    } else if (action === "saveconfig" || action === "save_config") {
       result = apiSaveConfig(payload.token, payload.newConfig);
-    } else if (action === "searchGoogleMapsLocation") {
+    } else if (action === "savekaryawan" || action === "save_karyawan") {
+      result = apiSaveKaryawan(payload.token, payload.karyawan);
+    } else if (action === "searchgooglemapslocation" || action === "search_google_maps_location") {
       result = apiSearchGoogleMapsLocation(payload.token, payload.query);
-    } else if (action === "submitLembur") {
+    } else if (action === "submitlembur" || action === "submit_lembur") {
       result = apiSubmitLembur(payload.token, payload);
-    } else if (action === "updateStatusLembur") {
+    } else if (action === "updatestatuslembur" || action === "update_status_lembur") {
       result = apiUpdateStatusLembur(payload.token, payload.idPengajuan, payload.newStatus);
-    } else if (action === "updatePassword") {
+    } else if (action === "updatepassword" || action === "update_password") {
       result = apiUpdatePassword(payload.token, payload.idKaryawan, payload.oldPin, payload.newPin);
-    } else if (action === "updateProfilePhoto") {
+    } else if (action === "updateprofilephoto" || action === "update_profile_photo") {
       result = apiUpdateProfilePhoto(payload.token, payload.idKaryawan, payload.photoUrl);
     } else if (action === "logout") {
       result = apiLogout(payload.token);
+    } else if (action === "ping") {
+      result = { success: true, message: "Pong! Google Apps Script Backend Online.", timestamp: new Date().toISOString() };
     }
 
     return ContentService.createTextOutput(JSON.stringify(result))

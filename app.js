@@ -101,6 +101,12 @@ if (typeof google === "undefined" || !google.script || !google.script.run) {
     runner.apiSaveConfig = function (token, newConfig) {
       sendRequest("saveConfig", { token: token, newConfig: newConfig });
     };
+    runner.apiGetAdminDashboard = function (token) {
+      sendRequest("getAdminDashboard", { token: token });
+    };
+    runner.apiSaveKaryawan = function (token, karyawan) {
+      sendRequest("saveKaryawan", { token: token, karyawan: karyawan });
+    };
     runner.apiSearchGoogleMapsLocation = function (token, query) {
       sendRequest("searchGoogleMapsLocation", { token: token, query: query });
     };
@@ -146,6 +152,14 @@ const AppState = {
     JAM_MASUK_STANDAR: "08:00",
     JAM_PULANG_STANDAR: "17:00"
   },
+  // In-Memory Caching (0-Second Tab Switch Anti-Lag by ZettBOT)
+  cache: {
+    dashboard: null,
+    dashboardTime: 0,
+    leaveList: null,
+    leaveListTime: 0,
+    reports: {}
+  },
   userLocation: {
     latitude: null,
     longitude: null,
@@ -179,12 +193,19 @@ const AppState = {
 /**
  * ==========================================================================
  * FITUR TIME SESSION (IDLE INACTIVITY AUTO-LOGOUT: 3 MENIT TANPA PERGERAKAN)
+ * Dilengkapi Throttling 4 Detik Anti-Lag untuk Performa Mobile Optimal
  * ==========================================================================
  */
 let idleTimer = null;
+let lastActivityResetTime = 0;
 const IDLE_LIMIT_MS = 3 * 60 * 1000; // 3 Menit = 180.000 ms
 
 function resetIdleTimer() {
+  const now = Date.now();
+  // Throttle 4 detik: Mencegah pemanggilan timer berlebih saat user scroll layar di HP
+  if (now - lastActivityResetTime < 4000) return;
+  lastActivityResetTime = now;
+
   if (idleTimer) {
     clearTimeout(idleTimer);
     idleTimer = null;
@@ -392,10 +413,17 @@ function startLiveWorkTimer() {
 }
 
 /**
- * Memuat data awal
+ * Memuat data awal aplikasi (Dilengkapi In-Memory Caching untuk Transisi Super Cepat)
  */
-function loadInitialData() {
+function loadInitialData(forceRefresh) {
   updateUserInterface();
+
+  const now = Date.now();
+  // Gunakan cache jika data tersedia dan belum kedaluwarsa (<= 60 detik)
+  if (!forceRefresh && AppState.cache && AppState.cache.dashboard && (now - AppState.cache.dashboardTime < 60000)) {
+    applyDashboardData(AppState.cache.dashboard);
+    return;
+  }
 
   if (typeof google !== "undefined" && google.script && google.script.run) {
     if (!AppState.sessionToken) {
@@ -407,47 +435,59 @@ function loadInitialData() {
     google.script.run
       .withSuccessHandler(function (res) {
         if (res && res.success) {
-          if (res.config) AppState.currentConfig = res.config;
-          if (res.history) AppState.historyList = res.history;
-          if (res.todayAllEmployeesLog) {
-            AppState.todayAllEmployeesLog = res.todayAllEmployeesLog;
-          } else {
-            AppState.todayAllEmployeesLog = [];
-          }
-          if (res.todayRecord) {
-            AppState.todayRecord = res.todayRecord;
-          } else {
-            AppState.todayRecord = null;
-          }
-          if (res.stats) {
-            const attended = (res.stats && typeof res.stats.totalAttended !== "undefined") ? res.stats.totalAttended : 0;
-            const absence = (res.stats && typeof res.stats.totalAbsence !== "undefined") ? res.stats.totalAbsence : 0;
-
-            const attendedEl = document.getElementById("cardAttendedCount");
-            const absenceEl = document.getElementById("cardAbsenceCount");
-            if (attendedEl) attendedEl.innerHTML = attended + " <span>Day</span>";
-            if (absenceEl) absenceEl.innerHTML = absence + " <span>Day</span>";
-
-            const statAtt = document.getElementById("statAttendedFull");
-            const statLeave = document.getElementById("statLeaveFull");
-            if (statAtt) statAtt.innerText = attended + " Hari";
-            if (statLeave) statLeave.innerText = absence + " Hari";
-
-            renderAttendanceChart(attended, absence);
-          }
-          renderDashboardData();
+          if (!AppState.cache) AppState.cache = {};
+          AppState.cache.dashboard = res;
+          AppState.cache.dashboardTime = Date.now();
+          applyDashboardData(res);
         } else if (res && res.code === 401) {
           handleUnauthorizedSession(res.message);
         }
       })
       .withFailureHandler(function (err) {
         console.warn("GAS load fallback:", err);
-        loadMockData();
+        if (AppState.cache && AppState.cache.dashboard) {
+          applyDashboardData(AppState.cache.dashboard);
+        } else {
+          loadMockData();
+        }
       })
       .apiGetDashboardData(AppState.sessionToken, AppState.currentUser ? AppState.currentUser.idKaryawan : "");
   } else {
     loadMockData();
   }
+}
+
+function applyDashboardData(res) {
+  if (!res) return;
+  if (res.config) AppState.currentConfig = res.config;
+  if (res.history) AppState.historyList = res.history;
+  if (res.todayAllEmployeesLog) {
+    AppState.todayAllEmployeesLog = res.todayAllEmployeesLog;
+  } else {
+    AppState.todayAllEmployeesLog = [];
+  }
+  if (res.todayRecord) {
+    AppState.todayRecord = res.todayRecord;
+  } else {
+    AppState.todayRecord = null;
+  }
+  if (res.stats) {
+    const attended = (res.stats && typeof res.stats.totalAttended !== "undefined") ? res.stats.totalAttended : 0;
+    const absence = (res.stats && typeof res.stats.totalAbsence !== "undefined") ? res.stats.totalAbsence : 0;
+
+    const attendedEl = document.getElementById("cardAttendedCount");
+    const absenceEl = document.getElementById("cardAbsenceCount");
+    if (attendedEl) attendedEl.innerHTML = attended + " <span>Day</span>";
+    if (absenceEl) absenceEl.innerHTML = absence + " <span>Day</span>";
+
+    const statAtt = document.getElementById("statAttendedFull");
+    const statLeave = document.getElementById("statLeaveFull");
+    if (statAtt) statAtt.innerText = attended + " Hari";
+    if (statLeave) statLeave.innerText = absence + " Hari";
+
+    renderAttendanceChart(attended, absence);
+  }
+  renderDashboardData();
 }
 
 function loadMockData() {
@@ -1377,13 +1417,21 @@ function processAndDisplaySelfie(file, successMsg) {
 /**
  * ==========================================================================
  * FITUR 2: EXPORT LAPORAN RENTANG TANGGAL (EXCEL & PDF)
+ * Dilengkapi In-Memory Report Caching (Anti-Lag & Akses Instan)
  * ==========================================================================
  */
 function exportReportToExcel() {
   const start = document.getElementById("reportStartDate").value;
   const end = document.getElementById("reportEndDate").value;
+  const cacheKey = (start || "all") + "_" + (end || "all");
 
-  showToast("Menyiapkan berkas Excel (.xlsx)...", "info");
+  // Jika data pada rentang tanggal sama sudah ada di cache, langsung unduh instan 0 detik
+  if (AppState.cache && AppState.cache.reports && AppState.cache.reports[cacheKey]) {
+    downloadXlsxFile(AppState.cache.reports[cacheKey], start, end);
+    return;
+  }
+
+  showToast("Mengambil data laporan dari server...", "info");
 
   if (typeof google !== "undefined" && google.script && google.script.run) {
     if (!AppState.sessionToken) {
@@ -1393,12 +1441,18 @@ function exportReportToExcel() {
     google.script.run
       .withSuccessHandler(function (res) {
         if (res && res.success) {
+          if (!AppState.cache) AppState.cache = {};
+          if (!AppState.cache.reports) AppState.cache.reports = {};
+          AppState.cache.reports[cacheKey] = res.data;
           downloadXlsxFile(res.data, start, end);
         } else if (res && res.code === 401) {
           handleUnauthorizedSession(res.message);
         } else {
-          showToast("Gagal mengambil laporan: " + (res ? res.message : "Error"), "error");
+          showToast((res ? res.message : "Gagal mengambil data laporan."), "error");
         }
+      })
+      .withFailureHandler(function (err) {
+        showToast("Gagal mengambil laporan: " + (err.message || err), "error");
       })
       .apiGetFilteredReport(AppState.sessionToken, start, end);
   } else {
@@ -1460,12 +1514,19 @@ function downloadXlsxFile(dataRows, start, end) {
 function openPrintPdfReport() {
   const start = document.getElementById("reportStartDate").value;
   const end = document.getElementById("reportEndDate").value;
+  const cacheKey = (start || "all") + "_" + (end || "all");
 
   document.getElementById("printPeriodLabel").innerText = "Periode: " + (start || "Semua") + " s/d " + (end || "Hari Ini");
   const tbody = document.getElementById("printReportTableBody");
   tbody.innerHTML = "";
 
   const renderTable = function (rows) {
+    tbody.innerHTML = "";
+    if (!rows || rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" align="center" style="padding:15px; color:#666;">Tidak ada data presensi pada rentang tanggal ini.</td></tr>';
+      window.print();
+      return;
+    }
     rows.forEach(function (r, idx) {
       const tr = document.createElement("tr");
       tr.innerHTML =
@@ -1481,6 +1542,14 @@ function openPrintPdfReport() {
     window.print();
   };
 
+  // Gunakan cache in-memory jika tersedia
+  if (AppState.cache && AppState.cache.reports && AppState.cache.reports[cacheKey]) {
+    renderTable(AppState.cache.reports[cacheKey]);
+    return;
+  }
+
+  showToast("Menyiapkan dokumen cetak PDF...", "info");
+
   if (typeof google !== "undefined" && google.script && google.script.run) {
     if (!AppState.sessionToken) {
       handleUnauthorizedSession("Sesi tidak valid. Silakan login kembali.");
@@ -1489,10 +1558,18 @@ function openPrintPdfReport() {
     google.script.run
       .withSuccessHandler(function (res) {
         if (res && res.success && res.data) {
+          if (!AppState.cache) AppState.cache = {};
+          if (!AppState.cache.reports) AppState.cache.reports = {};
+          AppState.cache.reports[cacheKey] = res.data;
           renderTable(res.data);
         } else if (res && res.code === 401) {
           handleUnauthorizedSession(res.message);
+        } else {
+          showToast((res ? res.message : "Gagal memuat data PDF."), "error");
         }
+      })
+      .withFailureHandler(function (err) {
+        showToast("Gagal memuat data PDF: " + (err.message || err), "error");
       })
       .apiGetFilteredReport(AppState.sessionToken, start, end);
   }
@@ -1881,7 +1958,7 @@ function handleLeaveProofFileChange(e) {
       const canvas = document.createElement("canvas");
       let width = img.width;
       let height = img.height;
-      const maxSide = 1200;
+      const maxSide = 960;
       if (width > maxSide || height > maxSide) {
         if (width > height) {
           height = Math.round((height * maxSide) / width);
@@ -1895,7 +1972,7 @@ function handleLeaveProofFileChange(e) {
       canvas.height = height;
       const ctx = canvas.getContext("2d");
       ctx.drawImage(img, 0, 0, width, height);
-      currentLeaveProofBase64 = canvas.toDataURL("image/jpeg", 0.82);
+      currentLeaveProofBase64 = canvas.toDataURL("image/jpeg", 0.75);
 
       const previewImg = document.getElementById("proofPreviewImg");
       const fileNameEl = document.getElementById("proofFileName");
@@ -1975,12 +2052,10 @@ function renderLeaveView() {
   }
 }
 
-function fetchAndRenderAdminLeaveRequests() {
+function fetchAndRenderAdminLeaveRequests(force) {
   const container = document.getElementById("adminLeaveCardsContainer");
   const badgeCount = document.getElementById("adminLeaveBadgeCount");
   if (!container) return;
-
-  container.innerHTML = '<div style="text-align: center; padding: 24px; color: var(--text-muted); font-size: 13px;"><div class="btn-spinner" style="margin: 0 auto 10px auto; border-top-color: var(--primary);"></div>Memuat data pengajuan izin...</div>';
 
   function renderList(list) {
     if (!list || list.length === 0) {
@@ -2041,17 +2116,33 @@ function fetchAndRenderAdminLeaveRequests() {
     container.innerHTML = html;
   }
 
+  // Gunakan cache in-memory jika tersedia
+  const now = Date.now();
+  if (!force && AppState.cache && AppState.cache.adminLeaves && (now - AppState.cache.adminLeavesTime < 60000)) {
+    renderList(AppState.cache.adminLeaves);
+    return;
+  }
+
+  container.innerHTML = '<div style="text-align: center; padding: 24px; color: var(--text-muted); font-size: 13px;"><div class="btn-spinner" style="margin: 0 auto 10px auto; border-top-color: var(--primary);"></div>Memuat data pengajuan izin...</div>';
+
   if (typeof google !== "undefined" && google.script && google.script.run) {
     google.script.run
       .withSuccessHandler(function (res) {
         if (res && res.success && res.data) {
+          if (!AppState.cache) AppState.cache = {};
+          AppState.cache.adminLeaves = res.data;
+          AppState.cache.adminLeavesTime = Date.now();
           renderList(res.data);
         } else {
           container.innerHTML = '<div style="text-align:center; padding:20px; font-size:13px; color:var(--text-sub);">Belum ada pengajuan izin.</div>';
         }
       })
       .withFailureHandler(function (err) {
-        container.innerHTML = '<div style="text-align:center; padding:20px; font-size:13px; color:var(--danger);">Gagal memuat data: ' + err.message + '</div>';
+        if (AppState.cache && AppState.cache.adminLeaves) {
+          renderList(AppState.cache.adminLeaves);
+        } else {
+          container.innerHTML = '<div style="text-align:center; padding:20px; font-size:13px; color:var(--danger);">Gagal memuat data: ' + err.message + '</div>';
+        }
       })
       .apiGetIzinList(AppState.sessionToken);
   }
@@ -2072,8 +2163,12 @@ function updateLeaveStatusByAdmin(idPengajuan, newStatus) {
     google.script.run
       .withSuccessHandler(function (res) {
         if (res && res.success) {
+          if (AppState.cache) {
+            AppState.cache.adminLeaves = null;
+            AppState.cache.employeeLeaves = null;
+          }
           showToast(res.message, "success");
-          fetchAndRenderAdminLeaveRequests();
+          fetchAndRenderAdminLeaveRequests(true);
         } else {
           if (card) {
             card.style.opacity = "1";
@@ -2093,49 +2188,72 @@ function updateLeaveStatusByAdmin(idPengajuan, newStatus) {
   }
 }
 
-function fetchAndRenderEmployeeLeaveHistory() {
+function fetchAndRenderEmployeeLeaveHistory(force) {
   const container = document.getElementById("personalLeaveHistoryContainer");
   if (!container) return;
+
+  function renderEmpList(data) {
+    if (!data || data.length === 0) {
+      container.innerHTML = '<div style="text-align:center; padding:18px; font-size:12.5px; color:var(--text-sub); background:var(--card-bg); border-radius:var(--radius-md); border:1px dashed var(--border-color);">Belum ada riwayat pengajuan izin sebelumnya.</div>';
+      return;
+    }
+    let html = "";
+    data.forEach(function (item) {
+      let pillClass = "pill-izin";
+      if (item.jenis === "Sakit") pillClass = "pill-sakit";
+      if (item.jenis === "Cuti") pillClass = "pill-cuti";
+
+      let statusBadge = "";
+      if (item.status === "Disetujui") {
+        statusBadge = '<span style="font-size: 11px; font-weight: 700; color: #15803d; background: #dcfce7; padding: 3px 8px; border-radius: 999px;">✓ Disetujui</span>';
+      } else if (item.status === "Ditolak") {
+        statusBadge = '<span style="font-size: 11px; font-weight: 700; color: #b91c1c; background: #fee2e2; padding: 3px 8px; border-radius: 999px;">✕ Ditolak</span>';
+      } else {
+        statusBadge = '<span style="font-size: 11px; font-weight: 700; color: #b45309; background: #fef3c7; padding: 3px 8px; border-radius: 999px;">⏳ Menunggu</span>';
+      }
+
+      let proofButton = "";
+      if (item.bukti && item.bukti !== "-" && item.bukti.startsWith("http")) {
+        proofButton = '<button type="button" class="btn-view-proof" onclick="openProofViewerModal(\'' + item.bukti + '\', \'Bukti ' + (item.jenis || "Izin") + '\')">📄 Lihat Bukti Surat</button>';
+      }
+
+      html += '<div class="leave-approval-card">' +
+        '<div class="leave-card-header">' +
+        '<span class="leave-type-pill ' + pillClass + '">' + (item.jenis || "Izin") + '</span>' +
+        statusBadge +
+        '</div>' +
+        '<div class="leave-date-range">📅 ' + (item.tglMulai || "-") + ' s/d ' + (item.tglSelesai || "-") + '</div>' +
+        '<div style="font-size: 12.5px; color: #475569; margin-top: 4px;">"' + (item.alasan || "-") + '"</div>' +
+        (proofButton ? '<div style="margin-top: 8px;">' + proofButton + '</div>' : '') +
+        '</div>';
+    });
+    container.innerHTML = html;
+  }
+
+  // Gunakan cache jika tersedia
+  const now = Date.now();
+  if (!force && AppState.cache && AppState.cache.employeeLeaves && (now - AppState.cache.employeeLeavesTime < 60000)) {
+    renderEmpList(AppState.cache.employeeLeaves);
+    return;
+  }
 
   if (typeof google !== "undefined" && google.script && google.script.run) {
     google.script.run
       .withSuccessHandler(function (res) {
         if (res && res.success && res.data) {
-          if (res.data.length === 0) {
-            container.innerHTML = '<div style="text-align:center; padding:18px; font-size:12.5px; color:var(--text-sub); background:var(--card-bg); border-radius:var(--radius-md); border:1px dashed var(--border-color);">Belum ada riwayat pengajuan izin sebelumnya.</div>';
-            return;
-          }
-          let html = "";
-          res.data.forEach(function (item) {
-            let pillClass = "pill-izin";
-            if (item.jenis === "Sakit") pillClass = "pill-sakit";
-            if (item.jenis === "Cuti") pillClass = "pill-cuti";
-
-            let statusBadge = "";
-            if (item.status === "Disetujui") {
-              statusBadge = '<span style="font-size: 11px; font-weight: 700; color: #15803d; background: #dcfce7; padding: 3px 8px; border-radius: 999px;">✓ Disetujui</span>';
-            } else if (item.status === "Ditolak") {
-              statusBadge = '<span style="font-size: 11px; font-weight: 700; color: #b91c1c; background: #fee2e2; padding: 3px 8px; border-radius: 999px;">✕ Ditolak</span>';
-            } else {
-              statusBadge = '<span style="font-size: 11px; font-weight: 700; color: #b45309; background: #fef3c7; padding: 3px 8px; border-radius: 999px;">⏳ Menunggu</span>';
-            }
-
-            let proofButton = "";
-            if (item.bukti && item.bukti !== "-" && item.bukti.startsWith("http")) {
-              proofButton = '<button type="button" class="btn-view-proof" onclick="openProofViewerModal(\'' + item.bukti + '\', \'Bukti ' + (item.jenis || "Izin") + '\')">📄 Lihat Bukti Surat</button>';
-            }
-
-            html += '<div class="leave-approval-card">' +
-              '<div class="leave-card-header">' +
-              '<span class="leave-type-pill ' + pillClass + '">' + (item.jenis || "Izin") + '</span>' +
-              statusBadge +
-              '</div>' +
-              '<div class="leave-date-range">📅 ' + (item.tglMulai || "-") + ' s/d ' + (item.tglSelesai || "-") + '</div>' +
-              '<div style="font-size: 12.5px; color: #475569; margin-top: 4px;">"' + (item.alasan || "-") + '"</div>' +
-              (proofButton ? '<div style="margin-top: 8px;">' + proofButton + '</div>' : '') +
-              '</div>';
-          });
-          container.innerHTML = html;
+          if (!AppState.cache) AppState.cache = {};
+          AppState.cache.employeeLeaves = res.data;
+          AppState.cache.employeeLeavesTime = Date.now();
+          renderEmpList(res.data);
+        } else {
+          container.innerHTML = '<div style="text-align:center; padding:18px; font-size:12.5px; color:var(--text-sub); background:var(--card-bg); border-radius:var(--radius-md); border:1px dashed var(--border-color);">Belum ada riwayat pengajuan izin sebelumnya.</div>';
+        }
+      })
+      .withFailureHandler(function (err) {
+        if (AppState.cache && AppState.cache.employeeLeaves) {
+          renderEmpList(AppState.cache.employeeLeaves);
+        } else {
+          container.innerHTML = '<div style="text-align:center; padding:18px; font-size:12.5px; color:var(--danger);">Gagal memuat data izin: ' + err.message + '</div>';
         }
       })
       .apiGetIzinList(AppState.sessionToken);
@@ -2177,10 +2295,14 @@ function handleLeaveSubmit(e) {
           submitBtn.innerText = "Kirim Pengajuan Izin";
         }
         if (res && res.success) {
+          if (AppState.cache) {
+            AppState.cache.employeeLeaves = null;
+            AppState.cache.adminLeaves = null;
+          }
           showToast(res.message, "success");
           document.getElementById("leaveForm").reset();
           clearLeaveProof();
-          fetchAndRenderEmployeeLeaveHistory();
+          fetchAndRenderEmployeeLeaveHistory(true);
         } else if (res && res.code === 401) {
           handleUnauthorizedSession(res.message);
         } else {
