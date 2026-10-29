@@ -1,0 +1,17 @@
+# Node dependencies (jika ada)
+node_modules/
+package-lock.json
+
+# Environment variables & secrets
+.env
+.env.local
+*.log
+
+# Vercel output & cache
+.vercel/
+
+# OS & IDE metadata
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

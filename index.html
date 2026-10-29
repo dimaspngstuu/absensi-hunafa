@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Al Hunafa Attendance - Presensi Karyawan & Guru</title>
+
+  <!-- Google Fonts: Plus Jakarta Sans (Modern & Clean) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet">
+
+  <!-- Leaflet Map Assets for Radius & Location Picker -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- SheetJS for Genuine Microsoft Excel (.xlsx) Export -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- Chart.js for Attendance Analytics Graph -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <!-- Modular CSS Styling (Vercel & Google Apps Script) -->
+  <link rel="stylesheet" href="style.css" />
+  <?!= typeof include !== 'undefined' ? include('css') : ''; ?>
+</head>
+
+<body>
+
+  <!-- Standard Web App Container -->
+  <div class="device-shell">
+
+    <!-- Main Viewport Area -->
+    <div class="viewport" id="viewportScroll">
+
+      <!-- ==========================================
+           TAB 1: HOME VIEW (PERSIS SCREENSHOT)
+           ========================================== -->
+      <div id="viewHome" class="app-view active-view">
+        <!-- App Header: Sapaan Selamat Datang, Nama, Tanggal & Jam Real-Time -->
+        <div class="app-header">
+          <div class="header-left">
+            <div class="header-greeting" id="greetingText">Assalamu'alaikum, Selamat Datang</div>
+            <div class="header-name" id="userNameHeader">Cecep Rahmat</div>
+            <div class="header-date" id="currentFullDate">Kamis, 29 Oktober 2026</div>
+          </div>
+          <div class="header-right">
+            <div class="live-clock-card" id="liveDigitalClock" title="Waktu Nyata Indonesia (WIB)">
+              <div class="live-clock-badge-top">
+                <span class="pulse-dot-green"></span>
+                <span>WAKTU NYATA</span>
+              </div>
+              <div class="live-clock-time-val">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+                <span id="liveClockDisplay">--:--:-- WIB</span>
+              </div>
+              <span id="officeLocationLabel" style="display: none;">Kantor Al Hunafa</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4 Metric Cards Grid (2x2) -->
+        <div class="metrics-grid" id="homeMetricsGrid">
+          <!-- Card 1: Check In -->
+          <div class="metric-card" id="cardCheckInBtn" onclick="openScanModal('CHECK_IN')" style="cursor: pointer;"
+            title="Klik untuk Presensi Masuk">
+            <div class="card-top">
+              <div class="card-icon-badge muted" id="cardCheckInIconBadge">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="7" y1="7" x2="17" y2="17"></line>
+                  <polyline points="17 7 17 17 7 17"></polyline>
+                </svg>
+              </div>
+              <div class="card-header-texts">
+                <span class="card-title">Check In</span>
+                <span class="card-subtitle" id="checkInSubText">Not Yet</span>
+              </div>
+            </div>
+            <div class="card-large-value muted-val" id="cardCheckInTime">--:--</div>
+          </div>
+
+          <!-- Card 2: Check Out -->
+          <div class="metric-card" id="cardCheckOutBtn" onclick="openScanModal('CHECK_OUT')" style="cursor: pointer;"
+            title="Klik untuk Presensi Pulang">
+            <div class="card-top">
+              <div class="card-icon-badge muted" id="cardCheckOutIconBadge">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="7" y1="17" x2="17" y2="7"></line>
+                  <polyline points="7 7 17 7 17 17"></polyline>
+                </svg>
+              </div>
+              <div class="card-header-texts">
+                <span class="card-title">Check Out</span>
+                <span class="card-subtitle" id="checkOutSubText">Not Yet</span>
+              </div>
+            </div>
+            <div class="card-large-value muted-val" id="cardCheckOutTime">--:--</div>
+          </div>
+        </div>
+
+        <!-- ====================================================================
+             FITUR 1: BANNER DINAMIS LIVE DURASI TOTAL JAM MASUK KERJA
+             ==================================================================== -->
+        <div class="work-duration-banner" id="workDurationBanner">
+          <div class="work-banner-top">
+            <span class="work-badge" id="workStatusBadge">
+              <span class="pulse-dot" id="workStatusDot" style="display: none;"></span>
+              <span id="workStatusText">Menunggu Presensi</span>
+            </span>
+            <span style="font-size: 11px; opacity: 0.85;">Hari Ini</span>
+          </div>
+          <div class="work-timer-val" id="workLiveTimerDisplay">Belum Melakukan Check-In</div>
+          <div class="work-timer-desc" id="workTimeNote">
+            Silakan tekan tombol kamera di bawah untuk presensi masuk.
+          </div>
+        </div>
+
+        <!-- Khusus Role Admin: Pemantauan Presensi Pegawai Hari Ini (Live Monitoring) -->
+        <div id="adminMonitoringSection" style="display: none; margin-top: 14px;">
+          <div class="section-header">
+            <div class="section-title" style="display: flex; align-items: center; gap: 8px;">
+              <span>Pemantauan Presensi Hari Ini</span>
+              <span class="badge-live-pulse">LIVE</span>
+            </div>
+            <span id="adminMonitoringBadge"
+              style="font-size: 11px; background: #eaf1ee; color: var(--primary); padding: 3px 8px; border-radius: var(--radius-full); font-weight: 700;">0
+              Pegawai</span>
+          </div>
+
+          <div class="history-list" id="adminMonitoringList">
+            <!-- Di-render dinamis oleh JavaScript jika login sebagai Admin -->
+          </div>
+        </div>
+
+        <!-- Attendance History Section (Riwayat Presensi Pegawai) -->
+        <div id="homeAttendanceHistorySection" style="margin-top: 16px;">
+          <div class="section-header">
+            <div class="section-title">Riwayat Presensi</div>
+            <a class="section-link" id="btnSeeMoreHistory" onclick="toggleSeeMoreHistory()">See More</a>
+          </div>
+
+          <!-- History List Cards -->
+          <div class="history-list" id="historyCardsContainer">
+            <!-- Rendered dynamically by JavaScript -->
+          </div>
+        </div>
+      </div>
+
+      <!-- ==========================================
+           TAB 2: ANALYTICS & EXPORT LAPORAN VIEW
+           ========================================== -->
+      <div id="viewAnalytics" class="app-view">
+        <div class="section-header" style="margin-top: 10px;">
+          <div class="section-title">Ringkasan & Export Laporan</div>
+        </div>
+
+        <!-- ====================================================================
+             FITUR 2: MODUL EXPORT LAPORAN BERDASARKAN RENTANG TANGGAL
+             ==================================================================== -->
+        <div class="metric-card" style="margin-bottom: 14px; border: 1.5px solid var(--primary-border);">
+          <div class="card-title" style="margin-bottom: 6px;">📥 Export Rekap Presensi Pegawai</div>
+          <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">
+            Pilih rentang tanggal untuk mengunduh rekap kehadiran dalam format Excel atau cetak PDF resmi.
+          </div>
+          <div class="form-group">
+            <label class="form-label">Dari Tanggal (Mulai)</label>
+            <input type="date" class="form-input" id="reportStartDate">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Sampai Tanggal (Selesai)</label>
+            <input type="date" class="form-input" id="reportEndDate">
+          </div>
+          <div class="export-buttons-row">
+            <button class="btn-export-excel" onclick="exportReportToExcel()">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path
+                  d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z" />
+              </svg>
+              Unduh Excel (.xlsx)
+            </button>
+            <button class="btn-export-pdf" onclick="openPrintPdfReport()">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path
+                  d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z" />
+              </svg>
+              Cetak PDF
+            </button>
+          </div>
+        </div>
+
+        <!-- ====================================================================
+             GRAFIK PERFORMA KEHADIRAN BULAN INI (CHART.JS)
+             ==================================================================== -->
+        <div class="metric-card" style="margin-bottom: 14px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <div class="card-title">Grafik Performa Kehadiran</div>
+            <span
+              style="font-size: 11px; background: #eaf1ee; color: #3d5c52; padding: 3px 8px; border-radius: 999px; font-weight: 700;">Bulan
+              Ini</span>
+          </div>
+          <!-- Canvas Grafik Doughnut Chart.js -->
+          <div style="position: relative; height: 180px; width: 100%; margin-bottom: 12px;">
+            <canvas id="attendanceDoughnutChart"></canvas>
+          </div>
+          <!-- Rincian Statistik Kehadiran (2 Kategori: Hadir & Sakit/Izin) -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px;">
+            <div
+              style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 10px 12px; border-radius: 12px; display: flex; align-items: center; gap: 8px;">
+              <span style="width: 9px; height: 9px; border-radius: 50%; background: #22c55e; flex-shrink: 0;"></span>
+              <div><span style="color:#666;">Hadir:</span> <strong id="statAttendedFull" style="color:#15803d;">15
+                  Hari</strong></div>
+            </div>
+            <div
+              style="background: #eff6ff; border: 1px solid #bfdbfe; padding: 10px 12px; border-radius: 12px; display: flex; align-items: center; gap: 8px;">
+              <span style="width: 9px; height: 9px; border-radius: 50%; background: #3b82f6; flex-shrink: 0;"></span>
+              <div><span style="color:#666;">Sakit/Izin:</span> <strong id="statLeaveFull" style="color:#1d4ed8;">1
+                  Hari</strong></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Riwayat Kehadiran Terakhir Pegawai -->
+        <div id="analyticsPersonalHistorySection">
+          <div class="section-header" style="margin-top: 14px;">
+            <div class="section-title">Riwayat Kehadiran Terakhir</div>
+          </div>
+          <div class="history-list" id="personalReportHistoryList">
+            <!-- Rendered dynamically by JavaScript -->
+          </div>
+        </div>
+      </div>
+
+      <!-- ==========================================
+           TAB 3: LEAVE (PENGAJUAN & PERSETUJUAN IZIN) VIEW
+           ========================================== -->
+      <div id="viewLeave" class="app-view">
+
+        <!-- Zona 1: Khusus Role Admin (Persetujuan Izin Pegawai) -->
+        <div id="adminLeaveSection" style="display: none;">
+          <div class="section-header" style="margin-top: 4px; display: flex; justify-content: space-between; align-items: center;">
+            <div class="section-title">Persetujuan Izin & Sakit</div>
+            <span id="adminLeaveBadgeCount" class="badge-live-pulse" style="font-size: 11px; padding: 3px 8px; border-radius: 999px;">0 Menunggu</span>
+          </div>
+          <div id="adminLeaveCardsContainer" style="margin-top: 10px;">
+            <!-- Di-render dinamis oleh fetchAndRenderAdminLeaveRequests() -->
+          </div>
+        </div>
+
+        <!-- Zona 2: Khusus Role Pegawai (Formulir Pengajuan Izin & Sakit) -->
+        <div id="employeeLeaveSection" style="display: block;">
+          <div class="section-header" style="margin-top: 4px;">
+            <div class="section-title">Pengajuan Izin & Sakit</div>
+          </div>
+          <div class="metric-card" style="margin-bottom: 16px;">
+            <form id="leaveForm" onsubmit="handleLeaveSubmit(event)">
+              <div class="form-group">
+                <label class="form-label">Jenis Pengajuan</label>
+                <select class="form-select" id="leaveType" required>
+                  <option value="Sakit">Sakit</option>
+                  <option value="Izin">Izin Keperluan Mendesak</option>
+                  <option value="Cuti">Cuti Tahunan</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Tanggal Mulai</label>
+                <input type="date" class="form-input" id="leaveStartDate" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Tanggal Selesai</label>
+                <input type="date" class="form-input" id="leaveEndDate" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Keterangan / Alasan</label>
+                <textarea class="form-textarea" id="leaveReason" rows="3" placeholder="Tuliskan keterangan detail..."
+                  required></textarea>
+              </div>
+
+              <!-- Upload Bukti Surat Sakit / Pendukung -->
+              <div class="form-group">
+                <label class="form-label">Lampiran Bukti (Surat Dokter / Foto Pendukung)</label>
+                <input type="file" id="leaveProofFileInput" accept="image/*" style="display: none;" onchange="handleLeaveProofFileChange(event)">
+                <div class="proof-upload-box" id="proofUploadBox" onclick="document.getElementById('leaveProofFileInput').click()">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary); margin-bottom: 4px;">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="17 8 12 3 7 8"></polyline>
+                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                  </svg>
+                  <span style="font-size: 13px; font-weight: 700; color: var(--text-main);">Pilih Foto / Jepret Surat Sakit</span>
+                  <span style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Format JPG, PNG (Maks 5MB)</span>
+                </div>
+                <!-- Pratinjau Foto Bukti -->
+                <div id="proofPreviewWrap" style="display: none; margin-top: 10px; position: relative; border-radius: var(--radius-md); overflow: hidden; border: 1.5px solid var(--primary-border); background: #f8faf9; padding: 8px;">
+                  <div style="display: flex; align-items: center; gap: 10px;">
+                    <img id="proofPreviewImg" src="" alt="Bukti Surat Sakit" style="width: 55px; height: 55px; object-fit: cover; border-radius: 8px; border: 1px solid #ddd;">
+                    <div style="flex: 1; min-width: 0;">
+                      <div id="proofFileName" style="font-size: 12px; font-weight: 700; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">surat_dokter.jpg</div>
+                      <div style="font-size: 11px; color: #2e7d32; font-weight: 600; margin-top: 2px;">✓ Foto bukti siap dilampirkan</div>
+                    </div>
+                    <button type="button" onclick="clearLeaveProof()" style="background: #fee2e2; border: none; color: #b91c1c; border-radius: 6px; padding: 6px 10px; font-size: 11px; font-weight: 700; cursor: pointer;">
+                      Hapus
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <button type="submit" class="btn-primary" id="btnSubmitLeave" style="width: 100%; margin-top: 8px;">
+                Kirim Pengajuan Izin
+              </button>
+            </form>
+          </div>
+
+          <!-- Riwayat Pengajuan Izin Saya (Pegawai) -->
+          <div class="section-header" style="margin-top: 16px;">
+            <div class="section-title">Riwayat Pengajuan Saya</div>
+          </div>
+          <div id="personalLeaveHistoryContainer" style="margin-bottom: 24px;">
+            <!-- Di-render dinamis -->
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ==========================================
+           TAB 4: SETTINGS / ADMIN VIEW (WITH MAP PICKER)
+           ========================================== -->
+      <div id="viewSettings" class="app-view">
+        <div class="section-header" style="margin-top: 10px;">
+          <div class="section-title">Pengaturan</div>
+        </div>
+
+        <!-- Modern User Profile Card -->
+        <div class="metric-card" style="margin-bottom: 16px; padding: 22px 16px; text-align: center;">
+          <!-- Avatar Frame with Change Photo Action -->
+          <div class="profile-avatar-wrap">
+            <div id="profileAvatarDisplay" class="profile-avatar-img">
+              <span id="profileAvatarInitials">AM</span>
+              <img id="profileAvatarImg" src="" alt="Foto Profil"
+                style="display: none; width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">
+            </div>
+            <label for="profilePhotoInput" class="profile-avatar-edit-btn" title="Ganti Foto Profil">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                <circle cx="12" cy="13" r="4"></circle>
+              </svg>
+            </label>
+            <input type="file" id="profilePhotoInput" accept="image/*" style="display: none;"
+              onchange="handleProfilePhotoUpload(event)">
+          </div>
+
+          <!-- User Info Typography -->
+          <div style="margin-bottom: 12px;">
+            <div id="profileName" style="font-size: 17px; font-weight: 800; color: var(--text-main); line-height: 1.3;">
+              -</div>
+            <div id="profileJabatan" style="font-size: 13px; color: var(--text-muted); margin-top: 3px;">-</div>
+            <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 8px;">
+              <span style="font-size: 12px; color: var(--text-sub);">NIP: <strong id="profileNip"
+                  style="color: var(--text-main);">-</strong></span>
+              <span style="color: var(--border-color); font-size: 12px;">•</span>
+              <span id="profileRoleBadge" class="role-pill-badge role-pill-pegawai">Pegawai</span>
+            </div>
+          </div>
+
+          <!-- Divider -->
+          <div style="height: 1px; background: var(--border-color); margin: 16px 0;"></div>
+
+          <!-- Action Buttons (Ubah Password & Logout) -->
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <button type="button" class="btn-secondary" onclick="openPasswordModal()"
+              style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 11px 16px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+              </svg>
+              <span>Ubah Password / PIN</span>
+            </button>
+
+            <button type="button" class="btn-logout" onclick="handleLogout()">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                <polyline points="16 17 21 12 16 7"></polyline>
+                <line x1="21" y1="12" x2="9" y2="12"></line>
+              </svg>
+              <span>Logout</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Panel Khusus Role Admin -->
+        <div id="adminPanelArea" style="display: none;">
+          <!-- ====================================================================
+               FITUR 4: GOOGLE MAPS INTERAKTIF (PILIH LOKASI TANPA KETIK ANGKA)
+               ==================================================================== -->
+          <div class="metric-card" style="margin-bottom: 14px; border: 1.5px solid var(--primary);">
+            <div class="card-title" style="margin-bottom: 4px;">🗺️ Pilih Lokasi Kantor di Peta Visual</div>
+            <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">
+              Klik atau geser pin di peta untuk menentukan titik koordinat kantor secara visual tanpa perlu menghafal
+              angka!
+            </div>
+
+            <!-- Embedded Interactive Map Container -->
+            <div id="adminInteractiveMap"></div>
+
+            <div class="form-group">
+              <label class="form-label">Tempel Link / Cari Alamat Google Maps</label>
+              <div style="display: flex; gap: 6px;">
+                <input type="text" class="form-input" id="mapsUrlSearchInput"
+                  placeholder="Cari lokasi di Google Maps (misal: Al Hunafa) atau tempel link..."
+                  onkeydown="if(event.key==='Enter'){event.preventDefault(); parseGoogleMapsUrlOrSearch();}"
+                  style="flex: 1;">
+                <button class="btn-secondary" onclick="parseGoogleMapsUrlOrSearch()"
+                  style="padding: 10px 14px; font-weight: 700;">🔍 Cari</button>
+              </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px;">
+              <button class="btn-secondary" onclick="detectCurrentLocationForAdmin()"
+                style="font-size: 12px; padding: 10px;">
+                📍 Titik GPS Saya
+              </button>
+              <button class="btn-secondary" onclick="openAdminSelectedInGoogleMaps()"
+                style="font-size: 12px; padding: 10px;">
+                🗺️ Buka di Google Maps
+              </button>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Label Nama / Alamat Kantor</label>
+              <input type="text" class="form-input" id="adminOfficeNameInput" value="West Jakarta, Indonesia">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Radius Toleransi Presensi (Meter)</label>
+              <input type="number" class="form-input" id="adminRadiusInput" value="50">
+            </div>
+
+            <!-- Koordinat tersimpan otomatis tanpa wajib diketik manual -->
+            <input type="hidden" id="adminLatInput" value="-6.175392">
+            <input type="hidden" id="adminLonInput" value="106.827153">
+
+            <div class="form-group" style="margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--border-color);">
+              <label class="form-label">🔗 URL Web App Google Sheets (Vercel API Bridge)</label>
+              <input type="url" class="form-input" id="adminGasApiUrlInput"
+                placeholder="https://script.google.com/macros/s/.../exec">
+              <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+                Tempel URL Web App dari Google Apps Script (berakhiran <code>/exec</code>) agar data presensi dari Vercel otomatis masuk ke Google Sheets.
+              </div>
+            </div>
+
+            <button class="btn-primary" onclick="saveAdminSettings()" style="width: 100%; margin-top: 6px;">
+              Simpan Pengaturan
+            </button>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ==========================================
+         BOTTOM NAVIGATION BAR (PERSIS SCREENSHOT)
+         ========================================== -->
+    <div class="bottom-nav">
+      <button class="nav-item active" id="navHome" onclick="switchNavTab('Home')">
+        <svg viewBox="0 0 24 24" fill="currentColor">
+          <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" />
+        </svg>
+        <span>Beranda</span>
+      </button>
+
+      <button class="nav-item" id="navAnalytics" onclick="switchNavTab('Analytics')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+          stroke-linejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="5" ry="5"></rect>
+          <polyline points="7 14 10 10 13 13 17 8"></polyline>
+          <polyline points="14 8 17 8 17 11"></polyline>
+        </svg>
+        <span>Laporan</span>
+      </button>
+
+      <!-- Floating Center Scan Button -->
+      <div class="nav-center-action" id="navCenterScanAction">
+        <button class="btn-floating-scan" onclick="openScanModal()" title="Presensi Sekarang">
+          <svg viewBox="0 0 24 24">
+            <path
+              d="M4 7V4h3V2H3a1 1 0 0 0-1 1v4h2zm16-5h-4v2h3v3h2V3a1 1 0 0 0-1-1zm1 15h-2v3h-3v2h4a1 1 0 0 0 1-1v-4zM7 22H3a1 1 0 0 1-1-1v-4h2v3h3v2zm5-13a3 3 0 1 0 0 6 3 3 0 0 0 0-6zm0 8c-2.67 0-8 1.34-8 4v1h16v-1c0-2.66-5.33-4-8-4z" />
+          </svg>
+        </button>
+      </div>
+
+      <button class="nav-item" id="navLeave" onclick="switchNavTab('Leave')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+          stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <polyline points="16 12 12 8 8 12"></polyline>
+          <line x1="12" y1="16" x2="12" y2="8"></line>
+        </svg>
+        <span>Izin</span>
+      </button>
+
+      <button class="nav-item" id="navSettings" onclick="switchNavTab('Settings')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+          stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path
+            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+          </path>
+        </svg>
+        <span>Pengaturan</span>
+      </button>
+    </div>
+
+    <!-- ==========================================================================
+         FITUR 3: MODAL SCAN PRESENSI UNIVERSAL DENGAN LIVE WEBCAM & GALERI
+         ========================================================================== -->
+    <div class="modal-overlay" id="scanModal">
+      <div class="modal-sheet">
+        <div class="sheet-handle" onclick="closeScanModal()"></div>
+        <div class="sheet-title">Presensi Kehadiran</div>
+        <div class="sheet-desc">
+          Pastikan Anda berada dalam radius maksimal 50 meter dari kantor dan ambil foto selfie wajah.
+        </div>
+
+        <!-- Segmented Type: Check-In vs Check-Out -->
+        <div class="segmented-control">
+          <button class="segmented-btn active" id="btnTypeCheckIn" onclick="setPresensiType('CHECK_IN')">
+            Check In (Masuk)
+          </button>
+          <button class="segmented-btn" id="btnTypeCheckOut" onclick="setPresensiType('CHECK_OUT')">
+            Check Out (Pulang)
+          </button>
+        </div>
+
+        <!-- Live GPS Radar Status -->
+        <div class="radar-box valid" id="gpsRadarCard">
+          <div class="radar-icon" id="gpsRadarIcon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <circle cx="12" cy="10" r="3"></circle>
+              <path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z"></path>
+            </svg>
+          </div>
+          <div class="radar-texts">
+            <div class="radar-status" id="gpsStatusText">Mendeteksi GPS...</div>
+            <div class="radar-sub" id="gpsDistanceSub">Memeriksa radius ke lokasi kantor...</div>
+            <!-- Tombol Pintas Atur Lokasi Kantor saat Di Luar Jarak -->
+            <div id="gpsOutOfRangeAction" style="display: none; margin-top: 4px;">
+              <button type="button" class="btn-pin-shortcut" onclick="openMapPickerModal()">
+                📍 Pilih / Set Lokasi Kantor di Peta
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Camera Live Frame Box -->
+        <div class="camera-frame" id="cameraFrameBox" onclick="handleCameraBoxClick()">
+          <!-- 1. Live Video Viewfinder -->
+          <video id="cameraLiveVideo" autoplay playsinline muted></video>
+          <!-- 2. Hidden Canvas for Frame Capture & Compression -->
+          <canvas id="cameraPreviewCanvas" style="display: none;"></canvas>
+          <!-- 3. Frozen Image Snapshot Preview -->
+          <img id="cameraSnapshotImg" alt="Snapshot Selfie">
+          <!-- 4. Face Guide Oval Reticle -->
+          <div class="face-guide-reticle" id="faceGuideReticle"></div>
+          <!-- 5. Interactive Touch Prompt (100% Kebal Sandbox Iframe) -->
+          <div class="camera-touch-prompt" id="cameraTouchPrompt">
+            <div class="prompt-cam-icon">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                <circle cx="12" cy="13" r="4"></circle>
+              </svg>
+            </div>
+            <div class="prompt-cam-text">Sentuh untuk Buka Kamera Depan</div>
+            <div class="prompt-cam-sub">Ambil foto selfie presensi ponsel</div>
+          </div>
+        </div>
+
+        <!-- Camera Control Bar (Dual Option: Live Snap / Unggah Galeri) -->
+        <div class="camera-control-bar">
+          <button type="button" class="btn-snap-photo" id="btnCaptureSnap" onclick="handleCaptureAction()">
+            📸 Buka Kamera Selfie
+          </button>
+          <button type="button" class="btn-gallery-photo" onclick="triggerGalleryFileInput()">
+            📁 Galeri / File
+          </button>
+        </div>
+
+        <!-- Hidden Native Mobile Front Camera Input (Kebal Sandbox GAS) -->
+        <input type="file" id="nativeCameraInput" accept="image/*" capture="user" style="display: none;"
+          onchange="handleNativeCameraCaptured(event)">
+
+        <!-- Hidden Fallback Gallery Input -->
+        <input type="file" id="galleryFileInput" accept="image/*" style="display: none;"
+          onchange="handleGalleryPhotoSelected(event)">
+
+        <div style="display: flex; gap: 10px; margin-top: 4px;">
+          <button class="btn-secondary" style="flex: 1;" onclick="closeScanModal()">Batal</button>
+          <button class="btn-primary" style="flex: 2;" id="btnSubmitPresensi" onclick="submitAttendanceProcess()"
+            disabled>
+            Kirim Presensi
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==========================================================================
+         MODAL PIN PETA INTERAKTIF ALA GOOGLE MAPS (DRAGGABLE PIN & GEOCODING)
+         ========================================================================== -->
+    <div class="modal-overlay" id="mapPickerModal" style="z-index: 120;">
+      <div class="modal-sheet" style="max-height: 92vh;">
+        <div class="sheet-handle" onclick="closeMapPickerModal()"></div>
+        <div class="sheet-title">📍 Tentukan Titik Lokasi Kantor</div>
+        <div class="sheet-desc">
+          Geser pin merah di peta, klik di sembarang titik, atau cari alamat seperti di Google Maps.
+        </div>
+
+        <!-- Search Place Input -->
+        <div style="display: flex; gap: 6px; margin-bottom: 8px;">
+          <input type="text" class="form-input" id="pickerSearchInput"
+            placeholder="Ketik nama jalan, gedung, atau daerah..." style="flex: 1; font-size: 13px;"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();searchLocationOnPickerMap();}">
+          <button type="button" class="btn-secondary" onclick="searchLocationOnPickerMap()"
+            style="padding: 10px 14px; font-weight: 700;">
+            🔍 Cari
+          </button>
+        </div>
+
+        <!-- Interactive Map Container -->
+        <div id="pickerInteractiveMap"></div>
+
+        <!-- Quick 1-Click Shortcut: Gunakan Lokasi Saya Sekarang -->
+        <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+          <button type="button" class="btn-secondary" onclick="setPickerToMyCurrentLocation()"
+            style="flex: 1; font-size: 12px; font-weight: 700; padding: 10px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <circle cx="12" cy="12" r="10"></circle>
+              <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+            Gunakan Lokasi Saya Saat Ini
+          </button>
+        </div>
+
+        <!-- Information details -->
+        <div
+          style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: var(--radius-md); padding: 10px 12px; margin-bottom: 12px; font-size: 12px; line-height: 1.5;">
+          <div><strong>Titik Terpilih:</strong> <span id="pickerCoordsLabel"
+              style="color: var(--primary); font-weight: 700;">-6.175392, 106.827153</span></div>
+          <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">
+            Radius presensi: <strong>50 meter</strong> dari pin merah di atas.
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 10px;">
+          <button type="button" class="btn-secondary" style="flex: 1;" onclick="closeMapPickerModal()">Batal</button>
+          <button type="button" class="btn-primary" style="flex: 2;" id="btnSavePickerLocation"
+            onclick="savePickerLocation()">
+            ✓ Simpan Lokasi Kantor
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Peninjau Foto Bukti Izin -->
+    <div class="modal-overlay" id="proofViewerModal">
+      <div class="modal-sheet" style="text-align: center; max-height: 85vh;">
+        <div class="sheet-handle" onclick="closeProofViewerModal()"></div>
+        <div class="sheet-title" id="proofViewerTitle">Lampiran Bukti Surat</div>
+        <div style="margin: 14px 0; max-height: 60vh; overflow-y: auto; border-radius: var(--radius-md); border: 1px solid var(--border-color); background: #0f172a; display: flex; align-items: center; justify-content: center; min-height: 180px;">
+          <img id="proofViewerImg" src="" alt="Bukti Lampiran" style="max-width: 100%; max-height: 55vh; object-fit: contain; display: block;">
+        </div>
+        <div style="display: flex; gap: 8px; justify-content: center; margin-top: 10px;">
+          <a id="proofViewerDriveLink" href="#" target="_blank" class="btn-view-proof" style="padding: 10px 18px; font-size: 12.5px;">Buka di Google Drive</a>
+          <button type="button" class="btn-primary" onclick="closeProofViewerModal()" style="padding: 10px 18px; font-size: 12.5px; width: auto;">Tutup</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==========================================
+         MODAL LOGIN / GANTI PENGGUNA (STYLE GAMBAR 2)
+         ========================================== -->
+    <div class="modal-overlay login-screen-mode" id="loginModal">
+      <div class="login-screen-wrap">
+        <!-- Top Green Curved Header Area -->
+        <div class="login-header-zone">
+          <button type="button" class="login-back-btn" id="loginBackBtn" onclick="closeLoginModal()"
+            title="Kembali ke Aplikasi">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+              stroke-linecap="round" stroke-linejoin="round">
+              <line x1="19" y1="12" x2="5" y2="12"></line>
+              <polyline points="12 19 5 12 12 5"></polyline>
+            </svg>
+          </button>
+
+          <!-- Slot Logo di Bagian Tengah -->
+          <div class="login-logo-container" id="appLoginLogo" title="Logo Resmi Al Hunafa">
+            <img src="https://lh3.googleusercontent.com/d/1SkgbggMKEV_TVQa3YsiLz8GjtoXeRL5M" alt="Logo Al Hunafa"
+              class="login-logo-img" referrerpolicy="no-referrer"
+              onerror="if(!this.dataset.retry){this.dataset.retry='1';this.src='https://drive.google.com/thumbnail?id=1SkgbggMKEV_TVQa3YsiLz8GjtoXeRL5M&sz=w250';}">
+          </div>
+          <div class="login-brand-title">Al Hunafa Attendance</div>
+          <div class="login-brand-sub">Sistem Presensi Kehadiran Terpadu</div>
+        </div>
+
+        <!-- Bottom Curved White Surface Form -->
+        <div class="login-card-surface" id="loginCardSurface">
+          <div class="login-heading">Selamat datang di sistem absensi Al Hunafa</div>
+
+          <form onsubmit="handleLoginSubmit(event)" id="loginFormContainer" novalidate>
+            <!-- Input Email atau Username dengan Ikon Amplop (Persis Gambar 2) -->
+            <div class="login-input-group">
+              <div class="login-input-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                  <polyline points="22,6 12,13 2,6"></polyline>
+                </svg>
+              </div>
+              <input type="text" class="login-input-pill" id="loginNip" placeholder="Email atau username..." required
+                autocomplete="username">
+            </div>
+
+            <!-- Input PIN dengan Ikon Kunci & Mata Toggle -->
+            <div class="login-input-group">
+              <div class="login-input-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                </svg>
+              </div>
+              <input type="password" class="login-input-pill" id="loginPin" placeholder="Masukkan PIN Keamanan..."
+                required autocomplete="current-password">
+              <button type="button" class="login-pwd-toggle-btn" onclick="toggleLoginPasswordVisibility()"
+                title="Lihat / Sembunyikan PIN">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round" id="loginEyeIcon">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                  <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+              </button>
+            </div>
+
+            <!-- Tombol Login Pill dengan Efek Loading -->
+            <button type="submit" class="btn-login-pill" id="btnLoginSubmit">
+              <span id="btnLoginText">Login</span>
+            </button>
+          </form>
+
+          <!-- Footer Tagline -->
+          <div style="margin-top: auto; padding-top: clamp(8px, 1.8vh, 14px); text-align: center;">
+            <div style="font-size: 11px; color: var(--text-sub);">
+              Absensi Online Berbasis GPS • Al Hunafa
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==========================================
+         MODAL UBAH PASSWORD / PIN
+         ========================================== -->
+    <div class="modal-overlay" id="passwordModal">
+      <div class="modal-sheet">
+        <div class="sheet-handle" onclick="closePasswordModal()"></div>
+        <div class="sheet-title">Ubah Password / PIN</div>
+        <div class="sheet-desc">
+          Pastikan PIN baru Anda mudah diingat dan tidak diberitahukan kepada orang lain.
+        </div>
+
+        <form onsubmit="handlePasswordSubmit(event)">
+          <div class="form-group">
+            <label class="form-label">PIN / Password Lama</label>
+            <input type="password" class="form-input" id="oldPinInput" placeholder="Masukkan PIN lama" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">PIN / Password Baru (Minimal 4 Karakter)</label>
+            <input type="password" class="form-input" id="newPinInput" placeholder="Masukkan PIN baru" minlength="4"
+              required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Konfirmasi PIN Baru</label>
+            <input type="password" class="form-input" id="confirmPinInput" placeholder="Ketik ulang PIN baru"
+              minlength="4" required>
+          </div>
+          <div style="display: flex; gap: 8px; margin-top: 10px;">
+            <button type="button" class="btn-secondary" style="flex: 1;" onclick="closePasswordModal()">Batal</button>
+            <button type="submit" class="btn-primary" style="flex: 2;">Simpan Perubahan</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Toast Notification Popup -->
+    <div class="toast" id="appToast">
+      <span id="toastIcon">✓</span>
+      <span id="toastMessage">Pesan notifikasi</span>
+    </div>
+
+  </div>
+
+  <!-- Area Cetak Laporan PDF Resmi (Hanya Terlihat Saat Print Preview) -->
+  <div id="printReportArea">
+    <div style="text-align: center; border-bottom: 2px solid #333; padding-bottom: 12px; margin-bottom: 16px;">
+      <img src="https://lh3.googleusercontent.com/d/1SkgbggMKEV_TVQa3YsiLz8GjtoXeRL5M" alt="Logo Al Hunafa"
+        style="height: 60px; max-height: 60px; width: auto; object-fit: contain; margin: 0 auto 10px auto; display: block; -webkit-print-color-adjust: exact; print-color-adjust: exact;"
+        referrerpolicy="no-referrer"
+        onerror="if(!this.dataset.retry){this.dataset.retry='1';this.src='https://drive.google.com/thumbnail?id=1SkgbggMKEV_TVQa3YsiLz8GjtoXeRL5M&sz=w250';}">
+      <h2 style="font-size: 20px; font-weight: 800; text-transform: uppercase; margin: 0 0 4px 0; letter-spacing: 0.5px;">AL HUNAFA ATTENDANCE</h2>
+      <p style="font-size: 14px; color: #555; margin: 0 0 4px 0;">Laporan Rekapitulasi Presensi Kehadiran Pegawai</p>
+      <p style="font-size: 12px; color: #777; margin: 0;" id="printPeriodLabel">Periode: -</p>
+    </div>
+    <table style="width: 100%; border-collapse: collapse; font-size: 12px;" border="1" cellpadding="6"
+      id="printReportTable">
+      <thead>
+        <tr style="background: #f0f0f0;">
+          <th>No</th>
+          <th>ID Presensi</th>
+          <th>Nama Pegawai</th>
+          <th>Tanggal</th>
+          <th>Check In</th>
+          <th>Check Out</th>
+          <th>Total Jam</th>
+        </tr>
+      </thead>
+      <tbody id="printReportTableBody">
+      </tbody>
+    </table>
+    <div style="margin-top: 30px; display: flex; justify-content: flex-end;">
+      <div style="text-align: center; width: 200px;">
+        <p style="font-size: 12px;">Mengetahui,</p>
+        <p style="font-size: 12px; font-weight: bold; margin-top: 50px;">HRD / Pimpinan Al Hunafa</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modular Client-Side JavaScript Logic (Vercel & Google Apps Script) -->
+  <script src="app.js"></script>
+  <?!= typeof include !== 'undefined' ? include('js') : ''; ?>
+</body>
+
+</html>
