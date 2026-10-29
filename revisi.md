@@ -1,35 +1,28 @@
-# REVISI & PENYEMPURNAAN SISTEM: KALKULASI JAM & TOTAL LEMBUR OTOMATIS (v2.19.0)
+# REVISI & PENYEMPURNAAN SISTEM: LABEL NAVIGASI IZIN/LEMBUR (v2.19.1)
 ## Projek: Al Hunafa Attendance
 Dokumen Rencana & Catatan Eksekusi Revisi Berkelanjutan (by ZettBOT).
 
-Status: **SELESAI DITERAPKAN (v2.19.0 - 30 Oktober 2026)**
+Status: **SELESAI DITERAPKAN (v2.19.1 - 30 Oktober 2026)**
 
 ---
 
 ### 1. Kebutuhan Pengguna
-- **Detail Jam Lembur & Kalkulasi Total Durasi**:
-  - Pengajuan lembur memerlukan rincian waktu spesifik: **Jam Mulai Lembur** (misal: 17:00), **Jam Selesai Lembur** (misal: 20:30), dan **Total Jam Lembur Otomatis** (misal: 3.5 Jam / 3 Jam 30 Menit).
-  - Tampilan kartu di sisi Admin dan riwayat pegawai harus menampilkan rincian jam dan total jam lembur secara jelas dan mencolok agar mempermudah evaluasi persetujuan.
+- **Label Navigasi Bawah Tab 3**:
+  - Mengubah label menu navigasi bawah dari `"Izin"` menjadi `"Izin/Lembur"` agar representatif terhadap fitur pengajuan lembur yang telah terintegrasi di dalamnya.
 
 ---
 
 ### 2. Solusi Rekayasa Sistem (SOP ZettBOT)
-1. **Input Jam Lembur Presisi di Formulir (`index.html`)**:
-   - Menambahkan blok input waktu khusus `#overtimeHoursSection` yang hanya muncul otomatis jika opsi **Lembur / Tugas Tambahan** dipilih.
-   - Kolom Jam Mulai dan Jam Selesai berbasis native time picker dengan validasi langsung.
-   - Badge kalkulasi live: otomatis menghitung selisih jam dan menit secara *real-time* (misal: `3 Jam 30 Menit (3.5 Jam)`).
-2. **Visualisasi Kartu Lembur Modern (`app.js`, `js.html`, `style.css`, `css.html`)**:
-   - Komponen chip visual `.overtime-time-chip` beraksen ungu: `⏰ 17:00 - 20:30 WIB • Total 3.5 Jam`.
-   - Admin dapat melihat langsung total jam lembur yang diajukan sebelum menekan tombol `✓ Terima / Setujui` atau `✕ Tolak`.
-3. **Data Storage & Kompatibilitas**:
-   - Data jam mulai, jam selesai, dan total durasi tersimpan rapi ke dalam catatan Google Sheets.
+1. **Pembaruan Label Tab Navigasi Bawah (`index.html`)**:
+   - Memperbarui tag teks `<span>Izin/Lembur</span>` pada tombol `#navLeave`.
+2. **Penyempurnaan Styling Responsif (`style.css`, `css.html`)**:
+   - Memperbarui properti `.nav-item` dengan `min-width: 58px; max-width: 74px; white-space: nowrap;` agar teks `"Izin/Lembur"` tertata rapi dalam satu baris tanpa terpotong atau wrap ke baris kedua pada layar smartphone yang sempit.
 
 ---
 
 ### 3. File yang Dimodifikasi
-- [index.html](file:///c:/Users/dimas/.gemini/antigravity-ide\project\absensi_pegawai\index.html): Penambahan blok waktu lembur dan widget hitung durasi otomatis.
-- [style.css](file:///c:/Users/dimas/.gemini/antigravity-ide\project\absensi_pegawai\style.css) & [css.html](file:///c:/Users/dimas/.gemini/antigravity-ide\project\absensi_pegawai\css.html): Desain chip `.overtime-time-chip`.
-- [app.js](file:///c:/Users/dimas/.gemini/antigravity-ide\project\absensi_pegawai\app.js) & [js.html](file:///c:/Users/dimas/.gemini/antigravity-ide\project\absensi_pegawai\js.html): Fungsi `calculateOvertimeHours()`, parser chip jam lembur, dan integrasi payload submit.
+- [index.html](file:///c:/Users/dimas/.gemini/antigravity-ide\project\absensi_pegawai\index.html): Pembaruan label nav item `#navLeave` menjadi `"Izin/Lembur"`.
+- [style.css](file:///c:/Users/dimas/.gemini/antigravity-ide\project\absensi_pegawai\style.css) & [css.html](file:///c:/Users/dimas/.gemini/antigravity-ide\project\absensi_pegawai\css.html): Optimasi lebar responsif & `white-space: nowrap` pada `.nav-item`.
 
 ---
 
