@@ -1,8 +1,40 @@
-# REVISI & PENYEMPURNAAN SISTEM: PEMANTAUAN PRESENSI LIVE & API ENGINE (v2.17.0)
+# REVISI & PENYEMPURNAAN SISTEM: INTEGRASI FITUR LEMBUR & APPROVAL ADMIN (v2.18.0)
 ## Projek: Al Hunafa Attendance
 Dokumen Rencana & Catatan Eksekusi Revisi Berkelanjutan (by ZettBOT).
 
-Status: **SELESAI DITERAPKAN (v2.17.0 - 29 Oktober 2026)**
+Status: **SELESAI DITERAPKAN (v2.18.0 - 30 Oktober 2026)**
+
+---
+
+### 1. Masalah & Kebutuhan Pengguna
+1. **Pengajuan Lembur Terintegrasi & Praktis**:
+   - Pengguna membutuhkan opsi pengajuan lembur yang simpel dan tidak membuat aplikasi penuh atau rumit (*Opsi 1: Terintegrasi ke Tab Izin*).
+   - Pegawai dapat mengajukan lembur/tugas tambahan beserta tanggal, rincian pekerjaan, dan lampiran surat tugas/foto kegiatan.
+2. **Fitur Penerimaan / Penolakan Lembur di Sisi Admin**:
+   - Administrator dapat melihat daftar pengajuan lembur yang masuk.
+   - Administrator memiliki tombol tindakan satu klik: `✓ Terima / Setujui` atau `✕ Tolak`.
+   - Admin dapat menyaring pengajuan secara cepat via tab filter (*Semua*, *Menunggu*, *Lembur*, *Sakit/Izin/Cuti*).
+   - Status approval otomatis tercatat di Google Sheets dan dapat dipantau langsung oleh pegawai di riwayat pengajuannya.
+
+---
+
+### 2. Solusi Rekayasa Sistem (SOP ZettBOT)
+1. **Frontend Pengajuan Pegawai (`index.html`, `app.js`, `js.html`)**:
+   - Menambahkan opsi `Lembur / Tugas Tambahan` pada dropdown jenis pengajuan.
+   - Dynamic Form Hinting: Form otomatis menyesuaikan placeholder dan label saat opsi Lembur dipilih (contoh: *"Keterangan / Rincian Tugas Lembur"*, *"Foto Surat Tugas / Kegiatan Lembur"*, tombol *"Kirim Pengajuan Lembur"*).
+2. **Panel Persetujuan Admin Terintegrasi**:
+   - Menambahkan Filter Chips di panel Admin (`Semua`, `Menunggu`, `Lembur`, `Sakit/Izin/Cuti`) dengan counter live.
+   - Badge visual khusus lembur bergradasi ungu lembut (`.pill-lembur`).
+   - Tombol tindakan `✓ Terima / Setujui` dan `✕ Tolak` terhubung langsung ke `apiUpdateStatusIzin` di Google Sheets.
+3. **Penyelarasan Desain (`style.css`, `css.html`)**:
+   - Mendefinisikan badge `.pill-lembur` dengan warna ungu modern (*violet accent*).
+
+---
+
+### 3. File yang Dimodifikasi
+- [index.html](file:///c:/Users/dimas/.gemini/antigravity-ide\project\absensi_pegawai\index.html): Penambahan opsi Lembur di form pegawai dan tab filter admin.
+- [style.css](file:///c:/Users/dimas/.gemini/antigravity-ide\project\absensi_pegawai\style.css) & [css.html](file:///c:/Users/dimas/.gemini/antigravity-ide\project\absensi_pegawai\css.html): Badge `.pill-lembur`.
+- [app.js](file:///c:/Users/dimas/.gemini/antigravity-ide\project\absensi_pegawai\app.js) & [js.html](file:///c:/Users/dimas/.gemini/antigravity-ide\project\absensi_pegawai\js.html): Handler ganti jenis pengajuan, filter chip admin, dan update status terima/tolak lembur.
 
 ---
 

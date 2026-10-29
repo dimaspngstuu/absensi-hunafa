@@ -2190,6 +2190,46 @@ function renderLeaveView() {
   }
 }
 
+let adminLeaveFilter = "all";
+
+function setAdminLeaveFilter(filterType) {
+  adminLeaveFilter = filterType;
+  ["all", "pending", "lembur", "izin"].forEach(function (type) {
+    const chip = document.getElementById("chipLeaveFilter" + type.charAt(0).toUpperCase() + type.slice(1));
+    if (chip) {
+      if (type === filterType) chip.classList.add("active");
+      else chip.classList.remove("active");
+    }
+  });
+  if (AppState.cache && AppState.cache.adminLeaves) {
+    fetchAndRenderAdminLeaveRequests(false);
+  } else {
+    fetchAndRenderAdminLeaveRequests(true);
+  }
+}
+
+function handleLeaveTypeChange(val) {
+  const lblReason = document.getElementById("lblReason");
+  const leaveReason = document.getElementById("leaveReason");
+  const lblProof = document.getElementById("lblProofAttachment");
+  const promptTitle = document.getElementById("proofUploadPromptTitle");
+  const btnSubmit = document.getElementById("btnSubmitLeave");
+
+  if (val === "Lembur") {
+    if (lblReason) lblReason.innerText = "Keterangan / Rincian Tugas Lembur";
+    if (leaveReason) leaveReason.placeholder = "Jelaskan rincian tugas lembur (misal: Persiapan PPDB, Piket Acara Malam s/d 20:00)...";
+    if (lblProof) lblProof.innerText = "Lampiran Bukti (Surat Tugas / Foto Kegiatan Lembur)";
+    if (promptTitle) promptTitle.innerText = "Pilih Foto Surat Tugas / Foto Kegiatan";
+    if (btnSubmit) btnSubmit.innerText = "Kirim Pengajuan Lembur";
+  } else {
+    if (lblReason) lblReason.innerText = "Keterangan / Alasan";
+    if (leaveReason) leaveReason.placeholder = "Tuliskan keterangan detail...";
+    if (lblProof) lblProof.innerText = "Lampiran Bukti (Surat Dokter / Foto Pendukung)";
+    if (promptTitle) promptTitle.innerText = "Pilih Foto / Jepret Surat Sakit";
+    if (btnSubmit) btnSubmit.innerText = "Kirim Pengajuan Izin";
+  }
+}
+
 function fetchAndRenderAdminLeaveRequests(force) {
   const container = document.getElementById("adminLeaveCardsContainer");
   const badgeCount = document.getElementById("adminLeaveBadgeCount");
@@ -2197,19 +2237,54 @@ function fetchAndRenderAdminLeaveRequests(force) {
 
   function renderList(list) {
     if (!list || list.length === 0) {
-      container.innerHTML = '<div style="text-align:center; padding:24px; font-size:13px; color:var(--text-sub); background:var(--card-bg); border-radius:var(--radius-md); border:1px dashed var(--primary-border);">Belum ada pengajuan izin dari pegawai.</div>';
+      container.innerHTML = '<div style="text-align:center; padding:24px; font-size:13px; color:var(--text-sub); background:var(--card-bg); border-radius:var(--radius-md); border:1px dashed var(--primary-border);">Belum ada pengajuan izin/lembur dari pegawai.</div>';
       if (badgeCount) badgeCount.innerText = "0 Menunggu";
+      const cAll = document.getElementById("countLeaveAll");
+      const cPen = document.getElementById("countLeavePending");
+      const cLem = document.getElementById("countLeaveLembur");
+      const cIz = document.getElementById("countLeaveIzin");
+      if (cAll) cAll.innerText = "0";
+      if (cPen) cPen.innerText = "0";
+      if (cLem) cLem.innerText = "0";
+      if (cIz) cIz.innerText = "0";
       return;
     }
 
     const pendingCount = list.filter(l => l.status === "Menunggu").length;
+    const lemburCount = list.filter(l => l.jenis === "Lembur").length;
+    const izinCount = list.filter(l => l.jenis !== "Lembur").length;
+
     if (badgeCount) badgeCount.innerText = pendingCount + " Menunggu";
+    const cAll = document.getElementById("countLeaveAll");
+    const cPen = document.getElementById("countLeavePending");
+    const cLem = document.getElementById("countLeaveLembur");
+    const cIz = document.getElementById("countLeaveIzin");
+    if (cAll) cAll.innerText = list.length;
+    if (cPen) cPen.innerText = pendingCount;
+    if (cLem) cLem.innerText = lemburCount;
+    if (cIz) cIz.innerText = izinCount;
+
+    let displayList = list;
+    if (adminLeaveFilter === "pending") {
+      displayList = list.filter(l => l.status === "Menunggu");
+    } else if (adminLeaveFilter === "lembur") {
+      displayList = list.filter(l => l.jenis === "Lembur");
+    } else if (adminLeaveFilter === "izin") {
+      displayList = list.filter(l => l.jenis !== "Lembur");
+    }
+
+    if (displayList.length === 0) {
+      container.innerHTML = '<div style="text-align:center; padding:20px; font-size:12.5px; color:var(--text-sub); background:var(--card-bg); border-radius:var(--radius-md); border:1px dashed var(--border-color);">Tidak ada pengajuan untuk kategori ini.</div>';
+      return;
+    }
 
     let html = "";
-    list.forEach(function (item) {
+    displayList.forEach(function (item) {
       let pillClass = "pill-izin";
       if (item.jenis === "Sakit") pillClass = "pill-sakit";
       if (item.jenis === "Cuti") pillClass = "pill-cuti";
+      if (item.jenis === "Lembur") pillClass = "pill-lembur";
+      if (item.jenis === "Lembur") pillClass = "pill-lembur";
 
       let statusBadge = "";
       if (item.status === "Disetujui") {
@@ -2222,13 +2297,14 @@ function fetchAndRenderAdminLeaveRequests(force) {
 
       let proofButton = "";
       if (item.bukti && item.bukti !== "-" && item.bukti.startsWith("http")) {
-        proofButton = '<button type="button" class="btn-view-proof" onclick="openProofViewerModal(\'' + item.bukti + '\', \'Bukti ' + (item.jenis || "Izin") + ' - ' + (item.nama || "") + '\')">📄 Lihat Bukti Surat</button>';
+        const proofTitle = (item.jenis === "Lembur") ? "Bukti Tugas Lembur" : ("Bukti " + (item.jenis || "Izin"));
+        proofButton = '<button type="button" class="btn-view-proof" onclick="openProofViewerModal(\'' + item.bukti + '\', \'' + proofTitle + ' - ' + (item.nama || "") + '\')">📄 Lihat Bukti Lampiran</button>';
       }
 
       let actionButtons = "";
       if (item.status === "Menunggu") {
         actionButtons = '<div class="leave-actions-row">' +
-          '<button type="button" class="btn-approve-leave" onclick="updateLeaveStatusByAdmin(\'' + item.idPengajuan + '\', \'Disetujui\')">✓ Setujui</button>' +
+          '<button type="button" class="btn-approve-leave" onclick="updateLeaveStatusByAdmin(\'' + item.idPengajuan + '\', \'Disetujui\')">✓ Terima / Setujui</button>' +
           '<button type="button" class="btn-reject-leave" onclick="updateLeaveStatusByAdmin(\'' + item.idPengajuan + '\', \'Ditolak\')">✕ Tolak</button>' +
           '</div>';
       }
@@ -2340,6 +2416,7 @@ function fetchAndRenderEmployeeLeaveHistory(force) {
       let pillClass = "pill-izin";
       if (item.jenis === "Sakit") pillClass = "pill-sakit";
       if (item.jenis === "Cuti") pillClass = "pill-cuti";
+      if (item.jenis === "Lembur") pillClass = "pill-lembur";
 
       let statusBadge = "";
       if (item.status === "Disetujui") {
@@ -2439,6 +2516,7 @@ function handleLeaveSubmit(e) {
           }
           showToast(res.message, "success");
           document.getElementById("leaveForm").reset();
+          handleLeaveTypeChange("Sakit");
           clearLeaveProof();
           fetchAndRenderEmployeeLeaveHistory(true);
         } else if (res && res.code === 401) {

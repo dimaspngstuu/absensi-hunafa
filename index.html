@@ -272,49 +272,74 @@
            ========================================== -->
       <div id="viewLeave" class="app-view">
 
-        <!-- Zona 1: Khusus Role Admin (Persetujuan Izin Pegawai) -->
+        <!-- Zona 1: Khusus Role Admin (Persetujuan Izin & Lembur Pegawai) -->
         <div id="adminLeaveSection" style="display: none;">
           <div class="section-header" style="margin-top: 4px; display: flex; justify-content: space-between; align-items: center;">
-            <div class="section-title">Persetujuan Izin & Sakit</div>
+            <div class="section-title">Persetujuan Izin & Lembur</div>
             <span id="adminLeaveBadgeCount" class="badge-live-pulse" style="font-size: 11px; padding: 3px 8px; border-radius: 999px;">0 Menunggu</span>
           </div>
+
+          <!-- Quick Filter Tabs for Admin Approvals -->
+          <div class="admin-monitor-stats-bar" style="margin-top: 8px; margin-bottom: 8px;">
+            <button type="button" class="monitor-chip active" id="chipLeaveFilterAll" onclick="setAdminLeaveFilter('all')">
+              <span>Semua</span>
+              <strong id="countLeaveAll">0</strong>
+            </button>
+            <button type="button" class="monitor-chip" id="chipLeaveFilterPending" onclick="setAdminLeaveFilter('pending')">
+              <span class="chip-dot-green"></span>
+              <span>Menunggu</span>
+              <strong id="countLeavePending">0</strong>
+            </button>
+            <button type="button" class="monitor-chip" id="chipLeaveFilterLembur" onclick="setAdminLeaveFilter('lembur')">
+              <span style="width: 7px; height: 7px; border-radius: 50%; background: #9333ea;"></span>
+              <span>Lembur</span>
+              <strong id="countLeaveLembur">0</strong>
+            </button>
+            <button type="button" class="monitor-chip" id="chipLeaveFilterIzin" onclick="setAdminLeaveFilter('izin')">
+              <span class="chip-dot-blue"></span>
+              <span>Sakit/Izin/Cuti</span>
+              <strong id="countLeaveIzin">0</strong>
+            </button>
+          </div>
+
           <div id="adminLeaveCardsContainer" style="margin-top: 10px;">
             <!-- Di-render dinamis oleh fetchAndRenderAdminLeaveRequests() -->
           </div>
         </div>
 
-        <!-- Zona 2: Khusus Role Pegawai (Formulir Pengajuan Izin & Sakit) -->
+        <!-- Zona 2: Khusus Role Pegawai (Formulir Pengajuan Izin, Cuti & Lembur) -->
         <div id="employeeLeaveSection" style="display: block;">
           <div class="section-header" style="margin-top: 4px;">
-            <div class="section-title">Pengajuan Izin & Sakit</div>
+            <div class="section-title" id="leaveSectionTitle">Pengajuan Izin, Cuti & Lembur</div>
           </div>
           <div class="metric-card" style="margin-bottom: 16px;">
             <form id="leaveForm" onsubmit="handleLeaveSubmit(event)">
               <div class="form-group">
                 <label class="form-label">Jenis Pengajuan</label>
-                <select class="form-select" id="leaveType" required>
+                <select class="form-select" id="leaveType" required onchange="handleLeaveTypeChange(this.value)">
                   <option value="Sakit">Sakit</option>
                   <option value="Izin">Izin Keperluan Mendesak</option>
                   <option value="Cuti">Cuti Tahunan</option>
+                  <option value="Lembur">Lembur / Tugas Tambahan</option>
                 </select>
               </div>
               <div class="form-group">
-                <label class="form-label">Tanggal Mulai</label>
+                <label class="form-label" id="lblStartDate">Tanggal Mulai</label>
                 <input type="date" class="form-input" id="leaveStartDate" required>
               </div>
               <div class="form-group">
-                <label class="form-label">Tanggal Selesai</label>
+                <label class="form-label" id="lblEndDate">Tanggal Selesai</label>
                 <input type="date" class="form-input" id="leaveEndDate" required>
               </div>
               <div class="form-group">
-                <label class="form-label">Keterangan / Alasan</label>
+                <label class="form-label" id="lblReason">Keterangan / Alasan</label>
                 <textarea class="form-textarea" id="leaveReason" rows="3" placeholder="Tuliskan keterangan detail..."
                   required></textarea>
               </div>
 
-              <!-- Upload Bukti Surat Sakit / Pendukung -->
+              <!-- Upload Bukti Surat Sakit / Surat Tugas Lembur -->
               <div class="form-group">
-                <label class="form-label">Lampiran Bukti (Surat Dokter / Foto Pendukung)</label>
+                <label class="form-label" id="lblProofAttachment">Lampiran Bukti (Surat Dokter / Foto Pendukung)</label>
                 <input type="file" id="leaveProofFileInput" accept="image/*" style="display: none;" onchange="handleLeaveProofFileChange(event)">
                 <div class="proof-upload-box" id="proofUploadBox" onclick="document.getElementById('leaveProofFileInput').click()">
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary); margin-bottom: 4px;">
@@ -322,15 +347,15 @@
                     <polyline points="17 8 12 3 7 8"></polyline>
                     <line x1="12" y1="3" x2="12" y2="15"></line>
                   </svg>
-                  <span style="font-size: 13px; font-weight: 700; color: var(--text-main);">Pilih Foto / Jepret Surat Sakit</span>
+                  <span style="font-size: 13px; font-weight: 700; color: var(--text-main);" id="proofUploadPromptTitle">Pilih Foto / Jepret Surat Sakit</span>
                   <span style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Format JPG, PNG (Maks 5MB)</span>
                 </div>
                 <!-- Pratinjau Foto Bukti -->
                 <div id="proofPreviewWrap" style="display: none; margin-top: 10px; position: relative; border-radius: var(--radius-md); overflow: hidden; border: 1.5px solid var(--primary-border); background: #f8faf9; padding: 8px;">
                   <div style="display: flex; align-items: center; gap: 10px;">
-                    <img id="proofPreviewImg" src="" alt="Bukti Surat Sakit" style="width: 55px; height: 55px; object-fit: cover; border-radius: 8px; border: 1px solid #ddd;">
+                    <img id="proofPreviewImg" src="" alt="Bukti Lampiran" style="width: 55px; height: 55px; object-fit: cover; border-radius: 8px; border: 1px solid #ddd;">
                     <div style="flex: 1; min-width: 0;">
-                      <div id="proofFileName" style="font-size: 12px; font-weight: 700; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">surat_dokter.jpg</div>
+                      <div id="proofFileName" style="font-size: 12px; font-weight: 700; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">lampiran.jpg</div>
                       <div style="font-size: 11px; color: #2e7d32; font-weight: 600; margin-top: 2px;">✓ Foto bukti siap dilampirkan</div>
                     </div>
                     <button type="button" onclick="clearLeaveProof()" style="background: #fee2e2; border: none; color: #b91c1c; border-radius: 6px; padding: 6px 10px; font-size: 11px; font-weight: 700; cursor: pointer;">
@@ -346,7 +371,7 @@
             </form>
           </div>
 
-          <!-- Riwayat Pengajuan Izin Saya (Pegawai) -->
+          <!-- Riwayat Pengajuan Izin & Lembur Saya (Pegawai) -->
           <div class="section-header" style="margin-top: 16px;">
             <div class="section-title">Riwayat Pengajuan Saya</div>
           </div>

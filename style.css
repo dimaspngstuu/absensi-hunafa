@@ -1901,6 +1901,11 @@ body {
   background: #e0f2fe;
   color: #075985;
 }
+.pill-lembur {
+  background: #f3e8ff;
+  color: #6b21a8;
+  border: 1px solid #d8b4fe;
+}
 .leave-date-range {
   font-size: 12px;
   font-weight: 600;
