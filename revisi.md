@@ -1,28 +1,28 @@
-# REVISI & PENYEMPURNAAN SISTEM: LABEL NAVIGASI IZIN/LEMBUR (v2.19.1)
+# REVISI & PENYEMPURNAAN SISTEM: FAVICON LOGO AL HUNAFA DI TAB BROWSER (v2.19.2)
 ## Projek: Al Hunafa Attendance
 Dokumen Rencana & Catatan Eksekusi Revisi Berkelanjutan (by ZettBOT).
 
-Status: **SELESAI DITERAPKAN (v2.19.1 - 30 Oktober 2026)**
+Status: **SELESAI DITERAPKAN (v2.19.2 - 30 Oktober 2026)**
 
 ---
 
 ### 1. Kebutuhan Pengguna
-- **Label Navigasi Bawah Tab 3**:
-  - Mengubah label menu navigasi bawah dari `"Izin"` menjadi `"Izin/Lembur"` agar representatif terhadap fitur pengajuan lembur yang telah terintegrasi di dalamnya.
+- **Logo pada Tab Browser (Favicon)**:
+  - Mengganti ikon bola dunia default `[🌐]` pada tab browser dengan Logo Resmi Al Hunafa persis seperti yang ada di halaman login aplikasi.
 
 ---
 
 ### 2. Solusi Rekayasa Sistem (SOP ZettBOT)
-1. **Pembaruan Label Tab Navigasi Bawah (`index.html`)**:
-   - Memperbarui tag teks `<span>Izin/Lembur</span>` pada tombol `#navLeave`.
-2. **Penyempurnaan Styling Responsif (`style.css`, `css.html`)**:
-   - Memperbarui properti `.nav-item` dengan `min-width: 58px; max-width: 74px; white-space: nowrap;` agar teks `"Izin/Lembur"` tertata rapi dalam satu baris tanpa terpotong atau wrap ke baris kedua pada layar smartphone yang sempit.
+1. **Pemasangan Favicon di Frontend (`index.html`)**:
+   - Menambahkan tag `<link rel="icon">`, `<link rel="shortcut icon">`, dan `<link rel="apple-touch-icon">` mengarah ke URL gambar Logo Al Hunafa (`https://lh3.googleusercontent.com/d/1SkgbggMKEV_TVQa3YsiLz8GjtoXeRL5M`).
+2. **Konfigurasi Favicon di Google Apps Script (`code.gs`)**:
+   - Menambahkan `.setFaviconUrl(...)` pada controller `doGet` agar favicon juga otomatis tampil saat aplikasi dibuka melalui tautan Web App Google Apps Script.
 
 ---
 
 ### 3. File yang Dimodifikasi
-- [index.html](file:///c:/Users/dimas/.gemini/antigravity-ide\project\absensi_pegawai\index.html): Pembaruan label nav item `#navLeave` menjadi `"Izin/Lembur"`.
-- [style.css](file:///c:/Users/dimas/.gemini/antigravity-ide\project\absensi_pegawai\style.css) & [css.html](file:///c:/Users/dimas/.gemini/antigravity-ide\project\absensi_pegawai\css.html): Optimasi lebar responsif & `white-space: nowrap` pada `.nav-item`.
+- [index.html](file:///c:/Users/dimas/.gemini/antigravity-ide\project\absensi_pegawai\index.html): Penambahan deklarasi favicon, shortcut icon, dan apple-touch-icon.
+- [code.gs](file:///c:/Users/dimas/.gemini/antigravity-ide\project\absensi_pegawai\code.gs): Penambahan `.setFaviconUrl(...)` pada `doGet`.
 
 ---
 

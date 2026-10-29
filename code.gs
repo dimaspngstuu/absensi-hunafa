@@ -77,8 +77,9 @@ function doGet(e) {
   }
   var template = HtmlService.createTemplateFromFile("index");
   return template.evaluate()
-    .setTitle("Al Hunafa Attendance")
+    .setTitle("Al Hunafa Attendance - Presensi Karyawan & Guru")
     .addMetaTag("viewport", "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no")
+    .setFaviconUrl("https://lh3.googleusercontent.com/d/1SkgbggMKEV_TVQa3YsiLz8GjtoXeRL5M")
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
