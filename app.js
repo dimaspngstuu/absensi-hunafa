@@ -2349,13 +2349,22 @@ function saveAdminSettings() {
   const radius = parseFloat(document.getElementById("adminRadiusInput").value);
   const officeName = document.getElementById("adminOfficeNameInput").value.trim();
 
-  // Simpan URL API jika input tersedia
+  // Simpan URL API ke localStorage browser
+  let urlUpdated = false;
   const gasApiInput = document.getElementById("adminGasApiUrlInput");
   if (gasApiInput) {
-    setGasApiUrl(gasApiInput.value.trim());
+    const rawVal = gasApiInput.value.trim();
+    if (rawVal) {
+      setGasApiUrl(rawVal);
+      urlUpdated = true;
+    }
   }
 
   if (isNaN(lat) || isNaN(lon) || isNaN(radius)) {
+    if (urlUpdated) {
+      showToast("URL Web App Google Sheets berhasil disimpan di aplikasi!", "success");
+      return;
+    }
     showToast("Mohon tentukan lokasi di peta dan radius yang valid.", "error");
     return;
   }
@@ -2369,13 +2378,14 @@ function saveAdminSettings() {
 
   if (typeof google !== "undefined" && google.script && google.script.run) {
     if (!AppState.sessionToken) {
+      if (urlUpdated) showToast("URL Web App berhasil disimpan di browser!", "success");
       handleUnauthorizedSession("Sesi tidak valid. Silakan login kembali.");
       return;
     }
     google.script.run
       .withSuccessHandler(function (res) {
         if (res && res.success) {
-          showToast(res.message, "success");
+          showToast(res.message || "Pengaturan kantor dan URL berhasil disimpan!", "success");
           AppState.currentConfig.LATITUDE_KANTOR = lat;
           AppState.currentConfig.LONGITUDE_KANTOR = lon;
           AppState.currentConfig.RADIUS_MAKSIMAL_METER = radius;
@@ -2384,8 +2394,16 @@ function saveAdminSettings() {
         } else if (res && res.code === 401) {
           handleUnauthorizedSession(res.message);
         } else {
-          showToast((res ? res.message : "Gagal menyimpan konfigurasi."), "error");
+          const errMsg = res ? (res.message || "") : "";
+          if (errMsg.indexOf("tidak dikenal") !== -1) {
+            showToast("URL Web App tersimpan di browser! Catatan: Google Apps Script Anda perlu di-Deploy Versi Baru agar sinkron dengan Google Sheets.", "info");
+          } else {
+            showToast(errMsg || "Gagal menyimpan konfigurasi ke Google Sheets.", "error");
+          }
         }
+      })
+      .withFailureHandler(function (err) {
+        showToast("URL tersimpan di browser. Status sinkronisasi: " + (err.message || err), "info");
       })
       .apiSaveConfig(AppState.sessionToken, newCfg);
   }
