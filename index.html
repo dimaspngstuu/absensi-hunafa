@@ -25,6 +25,8 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <!-- Chart.js for Attendance Analytics Graph -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <!-- Supabase Client SDK (Cloud High-Speed Database & Storage) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <!-- Modular CSS Styling (Vercel & Google Apps Script) -->
   <link rel="stylesheet" href="style.css" />
@@ -525,12 +527,44 @@
             <input type="hidden" id="adminLatInput" value="-6.175392">
             <input type="hidden" id="adminLonInput" value="106.827153">
 
-            <div class="form-group" style="margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--border-color);">
-              <label class="form-label">🔗 URL Web App Google Sheets (Vercel API Bridge)</label>
-              <input type="url" class="form-input" id="adminGasApiUrlInput"
-                placeholder="https://script.google.com/macros/s/.../exec">
-              <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
-                Tempel URL Web App dari Google Apps Script (berakhiran <code>/exec</code>) agar data presensi dari Vercel otomatis masuk ke Google Sheets.
+            <div class="form-group" style="margin-top: 16px; padding-top: 14px; border-top: 1.5px dashed var(--border-color);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <label class="form-label" style="margin-bottom: 0; font-weight: 800;">⚡ Mesin Basis Data (Database Engine)</label>
+                <span id="dbEngineStatusBadge" style="font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #dcfce7; color: #15803d;">Supabase Siap</span>
+              </div>
+              <select class="form-select" id="adminDbEngineSelect" onchange="toggleDbEngineSettingsUI(this.value)">
+                <option value="supabase">⚡ Supabase Cloud (Super Cepat, Realtime & Anti-Lemot)</option>
+                <option value="sheets">📊 Google Sheets (Klasik / Google Apps Script)</option>
+              </select>
+            </div>
+
+            <!-- Bagian Konfigurasi Supabase Cloud -->
+            <div id="supabaseConfigSection" style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: var(--radius-sm); padding: 12px; margin-bottom: 12px;">
+              <div style="font-size: 12px; font-weight: 700; color: #166534; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+                <span>🟢 Konfigurasi Supabase Cloud</span>
+              </div>
+              <div class="form-group" style="margin-bottom: 8px;">
+                <label class="form-label" style="font-size: 11.5px; color: #166534;">Project URL (Supabase)</label>
+                <input type="url" class="form-input" id="adminSupabaseUrlInput" placeholder="https://xyzabcdefg.supabase.co" style="border-color: #86efac; font-size: 12px;">
+              </div>
+              <div class="form-group" style="margin-bottom: 6px;">
+                <label class="form-label" style="font-size: 11.5px; color: #166534;">Anon Public Key (API Key)</label>
+                <input type="password" class="form-input" id="adminSupabaseKeyInput" placeholder="eyJhbGciOi..." style="border-color: #86efac; font-size: 12px;">
+              </div>
+              <div style="font-size: 10.5px; color: #15803d; line-height: 1.4;">
+                Dapatkan Project URL & Anon Key di menu <strong>Project Settings > API</strong> di dashboard Supabase Anda.
+              </div>
+            </div>
+
+            <!-- Bagian Konfigurasi Google Sheets (Fallback / Klasik) -->
+            <div id="gasConfigSection" style="display: none; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: var(--radius-sm); padding: 12px; margin-bottom: 12px;">
+              <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label">🔗 URL Web App Google Sheets (Vercel API Bridge)</label>
+                <input type="url" class="form-input" id="adminGasApiUrlInput"
+                  placeholder="https://script.google.com/macros/s/.../exec">
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+                  Tempel URL Web App dari Google Apps Script (berakhiran <code>/exec</code>) jika ingin menggunakan mode Google Sheets.
+                </div>
               </div>
             </div>
 

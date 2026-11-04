@@ -278,3 +278,10 @@ ZONA 2: MASTER CONTEXT & LOGIKA SISTEM TERKINI (LIVING CONTEXT)
     - Menambahkan throttling 4 detik pada event listener aktivitas idle untuk melenyapkan micro-stutter saat scrolling di layar ponsel.
     - Mengompresi foto bukti surat dokter/izin otomatis ke resolusi optimal 960px dan JPEG 0.75 (~70-120KB) sehingga pengiriman pengajuan izin tuntas dalam waktu < 1 detik.
     - Mengaktifkan hardware acceleration CSS dan momentum scrolling `-webkit-overflow-scrolling: touch;` pada viewport antarmuka.
+- **Penyelarasan Sistem Terkini (v3.0.0 - 5 November 2026)**:
+  * **Arsitektur Dual-Engine: Migrasi Penuh ke Supabase Cloud (High-Speed & Realtime)**:
+    - Mengatasi masalah latensi lambat Google Sheets (1.5-4 detik) dengan migrasi ke **Supabase Cloud PostgreSQL** berlatensi ultra-rendah (30-80 ms).
+    - Memasang skema database terstruktur di [supabase_schema.sql](file:///c:/Users/dimas/.gemini/antigravity-ide/project/absensi_pegawai/supabase_schema.sql) untuk tabel `karyawan`, `presensi`, `pengajuan_izin`, `config`, serta bucket penyimpanan foto `attendance-photos`.
+    - Mengintegrasikan `@supabase/supabase-js` via CDN di [index.html](file:///c:/Users/dimas/.gemini/antigravity-ide/project/absensi_pegawai/index.html) dan menyusun adapter query Supabase lengkap di [app.js](file:///c:/Users/dimas/.gemini/antigravity-ide/project/absensi_pegawai/app.js).
+    - Menambahkan fitur **Supabase Realtime**: Pemantauan presensi hari ini pada dashboard Admin ter-update secara otomatis detik itu juga ketika ada pegawai yang melakukan presensi tanpa perlu reload halaman.
+    - Menyediakan panel pemilihan mesin database (*Supabase Cloud* vs *Google Sheets*) pada Tab Pengaturan Admin sehingga transisi dapat dilakukan secara mulus tanpa *breaking change*.

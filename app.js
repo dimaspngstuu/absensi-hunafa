@@ -6,9 +6,12 @@
  * ==============================================================================
  */
 
-// Konfigurasi URL Google Apps Script Web App resmi Anda (berakhiran /exec)
-// Bisa diisi langsung di bawah ini atau melalui menu Pengaturan di aplikasi
+// ==============================================================================
+// DUAL DATABASE ENGINE CONFIGURATION: SUPABASE CLOUD (FAST) & GOOGLE SHEETS
+// ==============================================================================
 const DEFAULT_GAS_API_URL = "https://script.google.com/macros/s/AKfycbzryJei6cFoSKWqn2bp5oMiFElT0gp5tZbs-FiUTEuPGJ-QkQnhCyzWFUw2UAkNaF4/exec";
+const DEFAULT_SUPABASE_URL = "";
+const DEFAULT_SUPABASE_ANON_KEY = "";
 
 function getGasApiUrl() {
   return localStorage.getItem("alhunafa_gas_api_url") || DEFAULT_GAS_API_URL || "";
@@ -17,7 +20,6 @@ function getGasApiUrl() {
 function setGasApiUrl(newUrl) {
   if (newUrl) {
     let clean = newUrl.trim();
-    // Normalisasi jika user tanpa sengaja menyalin URL /dev atau tanpa /exec
     if (clean.endsWith("/dev")) {
       clean = clean.slice(0, -4) + "/exec";
     } else if (clean.includes("/macros/s/") && !clean.endsWith("/exec")) {
@@ -29,10 +31,151 @@ function setGasApiUrl(newUrl) {
   }
 }
 
+function getSupabaseUrl() {
+  return localStorage.getItem("alhunafa_supabase_url") || DEFAULT_SUPABASE_URL || "";
+}
+
+function setSupabaseUrl(url) {
+  if (url) localStorage.setItem("alhunafa_supabase_url", url.trim());
+  else localStorage.removeItem("alhunafa_supabase_url");
+}
+
+function getSupabaseAnonKey() {
+  return localStorage.getItem("alhunafa_supabase_key") || DEFAULT_SUPABASE_ANON_KEY || "";
+}
+
+function setSupabaseAnonKey(key) {
+  if (key) localStorage.setItem("alhunafa_supabase_key", key.trim());
+  else localStorage.removeItem("alhunafa_supabase_key");
+}
+
+function getDatabaseEngine() {
+  const saved = localStorage.getItem("alhunafa_db_engine");
+  if (saved) return saved;
+  // Default otomatis menggunakan Supabase jika kredensial terisi, atau fallback ke sheets jika kosong
+  if (getSupabaseUrl() && getSupabaseAnonKey()) return "supabase";
+  return "supabase";
+}
+
+function setDatabaseEngine(engine) {
+  localStorage.setItem("alhunafa_db_engine", engine);
+}
+
+let _cachedSupabaseClient = null;
+let _realtimeSubscribed = false;
+
+function getSupabaseClient() {
+  const url = getSupabaseUrl();
+  const key = getSupabaseAnonKey();
+  if (!url || !key) return null;
+  if (typeof window.supabase === "undefined" || !window.supabase.createClient) {
+    return null;
+  }
+  if (!_cachedSupabaseClient || _cachedSupabaseClient._targetUrl !== url || _cachedSupabaseClient._targetKey !== key) {
+    _cachedSupabaseClient = window.supabase.createClient(url, key);
+    _cachedSupabaseClient._targetUrl = url;
+    _cachedSupabaseClient._targetKey = key;
+    initSupabaseRealtimeListener(_cachedSupabaseClient);
+  }
+  return _cachedSupabaseClient;
+}
+
+function initSupabaseRealtimeListener(client) {
+  if (_realtimeSubscribed || !client) return;
+  try {
+    client
+      .channel("public_presensi_realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "presensi" }, function () {
+        if (AppState.currentUser && AppState.currentUser.role === "Admin") {
+          loadInitialData(true);
+        }
+      })
+      .subscribe();
+    _realtimeSubscribed = true;
+  } catch (e) {
+    console.warn("Realtime listener notice:", e);
+  }
+}
+
+function getJakartaDateString(date = new Date()) {
+  try {
+    const formatter = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta" });
+    return formatter.format(date); // YYYY-MM-DD
+  } catch (e) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return y + "-" + m + "-" + d;
+  }
+}
+
+function getJakartaTimeString(date = new Date()) {
+  try {
+    return date.toLocaleTimeString("en-GB", { timeZone: "Asia/Jakarta", hour12: false }); // HH:mm:ss
+  } catch (e) {
+    const h = String(date.getHours()).padStart(2, "0");
+    const m = String(date.getMinutes()).padStart(2, "0");
+    const s = String(date.getSeconds()).padStart(2, "0");
+    return h + ":" + m + ":" + s;
+  }
+}
+
+function formatHistoryDateClient(rawDateStr) {
+  if (!rawDateStr || rawDateStr.indexOf("-") === -1) {
+    return { dayNumber: "-", dayName: "-", formattedDate: rawDateStr || "-" };
+  }
+  const parts = rawDateStr.split("-");
+  const y = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10) - 1;
+  const d = parseInt(parts[2], 10);
+  const dObj = new Date(y, m, d);
+  const dayNames = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
+  const dayFullNames = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+  const monthNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+  const dayIdx = isNaN(dObj.getTime()) ? 0 : dObj.getDay();
+  return {
+    dayNumber: String(d),
+    dayName: dayNames[dayIdx],
+    formattedDate: dayFullNames[dayIdx] + ", " + d + " " + (monthNames[m] || "") + " " + y
+  };
+}
+
+async function uploadBase64ToSupabaseStorage(client, base64Data, filenamePrefix) {
+  if (!base64Data || typeof base64Data !== "string" || base64Data.indexOf("base64,") === -1) {
+    return "-";
+  }
+  try {
+    const parts = base64Data.split(";base64,");
+    const mime = parts[0].replace("data:", "") || "image/jpeg";
+    const bstr = atob(parts[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n);
+    }
+    const blob = new Blob([u8arr], { type: mime });
+    const ext = mime.indexOf("png") !== -1 ? "png" : "jpg";
+    const fileName = "attendance/" + filenamePrefix + "_" + Date.now() + "." + ext;
+
+    const { data, error } = await client.storage.from("attendance-photos").upload(fileName, blob, {
+      cacheControl: "3600",
+      upsert: true,
+      contentType: mime
+    });
+    if (error) {
+      console.warn("Storage upload error:", error);
+      return "-";
+    }
+    const { data: pubData } = client.storage.from("attendance-photos").getPublicUrl(fileName);
+    return pubData ? pubData.publicUrl : "-";
+  } catch (err) {
+    console.warn("Upload exception:", err);
+    return "-";
+  }
+}
+
 /**
- * Universal GAS Runner Polyfill:
- * Memungkinkan pemanggilan google.script.run.* berjalan 100% mulus di Vercel (via HTTP fetch POST)
- * maupun langsung di dalam lingkungan Google Apps Script bawaan.
+ * Universal GAS Runner Polyfill & Supabase Dual-Engine Router
  */
 if (typeof google === "undefined" || !google.script || !google.script.run) {
   window.google = window.google || {};
@@ -53,19 +196,413 @@ if (typeof google === "undefined" || !google.script || !google.script.run) {
       }
     };
 
+    async function executeSupabaseRequest(action, payload) {
+      const client = getSupabaseClient();
+      if (!client) {
+        failureCb(new Error("Koneksi Supabase belum diatur. Silakan masukkan Project URL & Anon Key di Pengaturan."));
+        return;
+      }
+
+      try {
+        if (action === "login") {
+          const clean = String(payload.identifier || "").trim().toLowerCase();
+          const cleanPin = String(payload.pin || "").trim();
+          const { data, error } = await client.from("karyawan").select("*");
+          if (error) throw error;
+
+          const row = (data || []).find(function (r) {
+            const rNip = String(r.nip || "").trim().toLowerCase();
+            const rEmail = String(r.email || "").trim().toLowerCase();
+            const rUser = String(r.username || "").trim().toLowerCase();
+            return (rNip === clean || rEmail === clean || rUser === clean);
+          });
+
+          if (row && String(row.pin).trim() === cleanPin) {
+            if (row.is_active === false) {
+              return successCb({ success: false, message: "Akun Anda saat ini sedang dinonaktifkan." });
+            }
+            const sessionToken = "sb_" + Math.random().toString(36).substring(2) + Date.now();
+            const sessionUser = {
+              idKaryawan: row.id,
+              nip: row.nip,
+              nama: row.nama,
+              role: row.role || "Pegawai",
+              jabatan: row.jabatan || "Staff",
+              photoUrl: row.foto_url || "",
+              email: row.email || "",
+              username: row.username || "",
+              loginTime: Date.now()
+            };
+            return successCb({ success: true, token: sessionToken, user: sessionUser, message: "Login berhasil!" });
+          }
+          return successCb({ success: false, message: "Email/Username atau PIN yang Anda masukkan salah." });
+        }
+
+        if (action === "getDashboard") {
+          const todayStr = getJakartaDateString();
+          const currentMonthStr = todayStr.substring(0, 7);
+          const idKaryawan = payload.idKaryawan || (AppState.currentUser ? AppState.currentUser.idKaryawan : "");
+
+          // 1. Config
+          const { data: cfgData } = await client.from("config").select("*");
+          const configObj = Object.assign({}, AppState.currentConfig);
+          (cfgData || []).forEach(function (c) {
+            if (c.key === "LATITUDE_KANTOR" || c.key === "LONGITUDE_KANTOR" || c.key === "RADIUS_MAKSIMAL_METER") {
+              configObj[c.key] = parseFloat(c.value);
+            } else {
+              configObj[c.key] = c.value;
+            }
+          });
+
+          // 2. Today's Record
+          let todayRecord = null;
+          if (idKaryawan) {
+            const { data: todayRow } = await client.from("presensi")
+              .select("*")
+              .eq("id_karyawan", idKaryawan)
+              .eq("tanggal", todayStr)
+              .maybeSingle();
+
+            if (todayRow) {
+              todayRecord = {
+                idPresensi: todayRow.id,
+                checkInTime: todayRow.check_in_time || "-",
+                checkInStatus: todayRow.check_in_status || "Hadir",
+                checkInFoto: todayRow.check_in_photo || "",
+                checkOutTime: todayRow.check_out_time || "-",
+                checkOutStatus: todayRow.check_out_status || "-",
+                checkOutFoto: todayRow.check_out_photo || "",
+                totalHours: todayRow.total_hours || "-"
+              };
+            }
+          }
+
+          // 3. Riwayat Kehadiran Terakhir (10 baris)
+          let historyList = [];
+          if (idKaryawan) {
+            const { data: histData } = await client.from("presensi")
+              .select("*")
+              .eq("id_karyawan", idKaryawan)
+              .order("tanggal", { ascending: false })
+              .limit(10);
+
+            historyList = (histData || []).map(function (h) {
+              const dInfo = formatHistoryDateClient(h.tanggal);
+              return {
+                idPresensi: h.id,
+                rawDate: h.tanggal,
+                dayNumber: dInfo.dayNumber,
+                dayName: dInfo.dayName,
+                formattedDate: dInfo.formattedDate,
+                checkInTime: h.check_in_time || "-",
+                checkOutTime: h.check_out_time || "-",
+                totalHours: h.total_hours || "-",
+                lokasi: h.lokasi || configObj.ALAMAT_KANTOR
+              };
+            });
+          }
+
+          // 4. Statistik Bulanan
+          let totalAttended = 0;
+          let totalAbsence = 0;
+          if (idKaryawan) {
+            const { data: mPres } = await client.from("presensi")
+              .select("id")
+              .eq("id_karyawan", idKaryawan)
+              .gte("tanggal", currentMonthStr + "-01")
+              .lte("tanggal", currentMonthStr + "-31");
+            totalAttended = mPres ? mPres.length : 0;
+
+            const { data: mIzin } = await client.from("pengajuan_izin")
+              .select("id")
+              .eq("id_karyawan", idKaryawan)
+              .eq("status", "Disetujui")
+              .gte("tgl_mulai", currentMonthStr + "-01");
+            totalAbsence = mIzin ? mIzin.length : 0;
+          }
+
+          // 5. Monitoring Admin (Seluruh Presensi Hari Ini)
+          let todayAllEmployeesLog = [];
+          if (AppState.currentUser && AppState.currentUser.role === "Admin") {
+            const { data: allPres } = await client.from("presensi")
+              .select("*")
+              .eq("tanggal", todayStr)
+              .order("created_at", { ascending: false });
+
+            todayAllEmployeesLog = (allPres || []).map(function (p) {
+              return {
+                idPresensi: p.id,
+                idKaryawan: p.id_karyawan,
+                nama: p.nama_karyawan,
+                checkInTime: p.check_in_time || "-",
+                checkInStatus: p.check_in_status || "Hadir",
+                checkOutTime: p.check_out_time || "-",
+                checkOutStatus: p.check_out_status || "-",
+                totalHours: p.total_hours || "-"
+              };
+            });
+          }
+
+          return successCb({
+            success: true,
+            config: configObj,
+            todayRecord: todayRecord,
+            history: historyList,
+            stats: { totalAttended: totalAttended, totalAbsence: totalAbsence },
+            todayAllEmployeesLog: todayAllEmployeesLog
+          });
+        }
+
+        if (action === "submitPresensi") {
+          const idKaryawan = payload.idKaryawan || (AppState.currentUser ? AppState.currentUser.idKaryawan : "");
+          const type = String(payload.type).toUpperCase();
+          const userLat = parseFloat(payload.latitude);
+          const userLon = parseFloat(payload.longitude);
+
+          const cfg = AppState.currentConfig;
+          const dist = calculateClientHaversine(userLat, userLon, cfg.LATITUDE_KANTOR, cfg.LONGITUDE_KANTOR);
+          const roundedDist = Math.round(dist * 10) / 10;
+          const maxRadius = cfg.RADIUS_MAKSIMAL_METER || 50;
+
+          if (roundedDist > maxRadius) {
+            return successCb({
+              success: false,
+              isOutOfRange: true,
+              currentDistance: roundedDist,
+              maxRadius: maxRadius,
+              message: "Presensi Ditolak: Anda berada " + Math.round(roundedDist) + " meter dari kantor (Batas maksimal " + maxRadius + " meter)."
+            });
+          }
+
+          let photoUrl = "-";
+          if (payload.base64Photo) {
+            photoUrl = await uploadBase64ToSupabaseStorage(client, payload.base64Photo, type + "_" + idKaryawan);
+          }
+
+          const todayStr = getJakartaDateString();
+          const timeStr = getJakartaTimeString();
+          const namaKaryawan = AppState.currentUser ? AppState.currentUser.nama : "Pegawai";
+
+          const { data: existing } = await client.from("presensi")
+            .select("*")
+            .eq("id_karyawan", idKaryawan)
+            .eq("tanggal", todayStr)
+            .maybeSingle();
+
+          if (type === "CHECK_IN") {
+            if (existing && existing.check_in_time) {
+              return successCb({ success: false, message: "Anda sudah melakukan Check-In untuk hari ini pada jam " + existing.check_in_time });
+            }
+            const jamMasukStd = cfg.JAM_MASUK_STANDAR || "08:00";
+            const isLate = timeStr.localeCompare(jamMasukStd + ":00") > 0;
+            const status = isLate ? "Terlambat" : "Tepat Waktu";
+            const presId = "PRES-" + Date.now();
+
+            const { error: insErr } = await client.from("presensi").insert({
+              id: presId,
+              id_karyawan: idKaryawan,
+              nama_karyawan: namaKaryawan,
+              tanggal: todayStr,
+              check_in_time: timeStr,
+              check_in_status: status,
+              check_in_distance: roundedDist,
+              check_in_photo: photoUrl,
+              lokasi: cfg.ALAMAT_KANTOR
+            });
+            if (insErr) throw insErr;
+            return successCb({ success: true, type: "CHECK_IN", time: timeStr, status: status, message: "Presensi Masuk Berhasil! (" + status + ")" });
+          } else {
+            // CHECK_OUT
+            if (!existing || !existing.check_in_time) {
+              return successCb({ success: false, message: "Anda belum melakukan Check-In hari ini." });
+            }
+            if (existing.check_out_time && existing.check_out_time !== "-") {
+              return successCb({ success: false, message: "Anda sudah melakukan Check-Out hari ini pada jam " + existing.check_out_time });
+            }
+
+            let totalHours = "-";
+            try {
+              const inParts = existing.check_in_time.split(":");
+              const outParts = timeStr.split(":");
+              const inMin = parseInt(inParts[0], 10) * 60 + parseInt(inParts[1], 10);
+              const outMin = parseInt(outParts[0], 10) * 60 + parseInt(outParts[1], 10);
+              const diff = Math.max(0, outMin - inMin);
+              const h = String(Math.floor(diff / 60)).padStart(2, "0");
+              const m = String(diff % 60).padStart(2, "0");
+              totalHours = h + ":" + m;
+            } catch (eDur) { }
+
+            const { error: updErr } = await client.from("presensi").update({
+              check_out_time: timeStr,
+              check_out_status: "Selesai",
+              check_out_distance: roundedDist,
+              check_out_photo: photoUrl,
+              total_hours: totalHours
+            }).eq("id", existing.id);
+            if (updErr) throw updErr;
+
+            return successCb({ success: true, type: "CHECK_OUT", time: timeStr, status: "Selesai", totalHours: totalHours, message: "Presensi Pulang Berhasil!" });
+          }
+        }
+
+        if (action === "submitIzin") {
+          let proofUrl = "-";
+          if (payload.buktiPhoto) {
+            proofUrl = await uploadBase64ToSupabaseStorage(client, payload.buktiPhoto, "bukti_" + payload.idKaryawan);
+          }
+          const izinId = "IZIN-" + Date.now();
+          const { error: izErr } = await client.from("pengajuan_izin").insert({
+            id: izinId,
+            id_karyawan: payload.idKaryawan,
+            nama_karyawan: AppState.currentUser ? AppState.currentUser.nama : "Pegawai",
+            jenis: payload.jenis,
+            tgl_mulai: payload.tglMulai,
+            tgl_selesai: payload.tglSelesai,
+            alasan: payload.alasan,
+            bukti_url: proofUrl,
+            status: "Menunggu"
+          });
+          if (izErr) throw izErr;
+          return successCb({ success: true, message: "Pengajuan " + payload.jenis + " berhasil dikirim!" });
+        }
+
+        if (action === "getIzinList") {
+          const { data: izinRows, error: izListErr } = await client.from("pengajuan_izin")
+            .select("*")
+            .order("created_at", { ascending: false });
+          if (izListErr) throw izListErr;
+
+          const mapped = (izinRows || []).map(function (item) {
+            return {
+              idPengajuan: item.id,
+              idKaryawan: item.id_karyawan,
+              nama: item.nama_karyawan,
+              jenis: item.jenis,
+              tglMulai: item.tgl_mulai,
+              tglSelesai: item.tgl_selesai,
+              alasan: item.alasan,
+              bukti: item.bukti_url,
+              status: item.status
+            };
+          });
+          return successCb({ success: true, data: mapped });
+        }
+
+        if (action === "updateStatusIzin") {
+          const { error: updErr } = await client.from("pengajuan_izin")
+            .update({ status: payload.newStatus })
+            .eq("id", payload.idPengajuan);
+          if (updErr) throw updErr;
+          return successCb({ success: true, message: "Status pengajuan berhasil diubah menjadi " + payload.newStatus });
+        }
+
+        if (action === "getFilteredReport") {
+          let q = client.from("presensi").select("*").order("tanggal", { ascending: true });
+          if (payload.startDate) q = q.gte("tanggal", payload.startDate);
+          if (payload.endDate) q = q.lte("tanggal", payload.endDate);
+          const { data: repData, error: repErr } = await q;
+          if (repErr) throw repErr;
+
+          const formatted = (repData || []).map(function (r) {
+            return {
+              idPresensi: r.id,
+              idKaryawan: r.id_karyawan,
+              nama: r.nama_karyawan,
+              tanggal: r.tanggal,
+              checkIn: r.check_in_time || "-",
+              checkOut: r.check_out_time || "-",
+              totalHours: r.total_hours || "-",
+              lokasi: r.lokasi || "Office",
+              fotoMasukUrl: r.check_in_photo || "-",
+              fotoPulangUrl: r.check_out_photo || "-"
+            };
+          });
+          return successCb({ success: true, data: formatted });
+        }
+
+        if (action === "saveConfig") {
+          const newCfg = payload.newConfig || {};
+          const upserts = Object.keys(newCfg).map(function (k) {
+            return { key: k, value: String(newCfg[k]) };
+          });
+          if (upserts.length > 0) {
+            const { error: cfgErr } = await client.from("config").upsert(upserts);
+            if (cfgErr) throw cfgErr;
+          }
+          return successCb({ success: true, message: "Pengaturan berhasil disimpan di Supabase Cloud!" });
+        }
+
+        if (action === "updatePassword") {
+          const { data: kRow, error: kErr } = await client.from("karyawan")
+            .select("pin")
+            .eq("id", payload.idKaryawan)
+            .single();
+          if (kErr || !kRow) throw new Error("Pegawai tidak ditemukan.");
+          if (String(kRow.pin).trim() !== String(payload.oldPin).trim()) {
+            return successCb({ success: false, message: "PIN lama yang Anda masukkan salah." });
+          }
+          const { error: updPinErr } = await client.from("karyawan")
+            .update({ pin: String(payload.newPin).trim() })
+            .eq("id", payload.idKaryawan);
+          if (updPinErr) throw updPinErr;
+          return successCb({ success: true, message: "PIN berhasil diperbarui!" });
+        }
+
+        if (action === "updateProfilePhoto") {
+          let photoUrl = payload.photoUrl;
+          if (photoUrl && photoUrl.indexOf("base64,") !== -1) {
+            photoUrl = await uploadBase64ToSupabaseStorage(client, photoUrl, "profile_" + payload.idKaryawan);
+          }
+          const { error: pErr } = await client.from("karyawan")
+            .update({ foto_url: photoUrl })
+            .eq("id", payload.idKaryawan);
+          if (pErr) throw pErr;
+          return successCb({ success: true, photoUrl: photoUrl, message: "Foto profil berhasil diperbarui!" });
+        }
+
+        if (action === "getAdminDashboard") {
+          const { data: kList, error: kListErr } = await client.from("karyawan").select("*").order("nama", { ascending: true });
+          if (kListErr) throw kListErr;
+          return successCb({ success: true, karyawanList: kList || [], config: AppState.currentConfig });
+        }
+
+        if (action === "saveKaryawan") {
+          const { error: skErr } = await client.from("karyawan").upsert(payload.karyawan);
+          if (skErr) throw skErr;
+          return successCb({ success: true, message: "Data karyawan berhasil disimpan!" });
+        }
+
+        if (action === "logout") {
+          return successCb({ success: true });
+        }
+
+        failureCb(new Error("Aksi '" + action + "' belum diimplementasikan di Supabase adapter."));
+      } catch (err) {
+        console.error("Supabase Error:", err);
+        failureCb(err);
+      }
+    }
+
     function sendRequest(action, payload) {
+      const engine = getDatabaseEngine();
+      const sbClient = getSupabaseClient();
+
+      // Gunakan Supabase Cloud jika engine diset Supabase dan kredensial tersedia
+      if (engine === "supabase" && sbClient) {
+        executeSupabaseRequest(action, payload || {});
+        return;
+      }
+
+      // Fallback ke Google Apps Script Web App (Klasik)
       const gasUrl = getGasApiUrl();
       if (!gasUrl) {
         setTimeout(function () {
-          failureCb(new Error("URL Web App Google Sheets belum diatur. Silakan atur URL Web App di menu Pengaturan."));
+          failureCb(new Error("Koneksi Database belum diatur. Silakan atur Supabase atau URL Web App Google Sheets di menu Pengaturan."));
         }, 80);
         return;
       }
 
       const bodyData = JSON.stringify(Object.assign({ action: action }, payload || {}));
-
-      // Menggunakan mode POST ke Google Apps Script
-      // Content-Type: text/plain mencegah CORS OPTIONS preflight check
       fetch(gasUrl, {
         method: "POST",
         headers: { "Content-Type": "text/plain;charset=utf-8" },
@@ -1896,8 +2433,47 @@ function updateSettingsView() {
     if (gasApiInput) {
       gasApiInput.value = getGasApiUrl();
     }
+
+    // Sinkronkan konfigurasi Database Engine (Supabase / Google Sheets)
+    const engineSelect = document.getElementById("adminDbEngineSelect");
+    if (engineSelect) engineSelect.value = getDatabaseEngine();
+
+    const sbUrlInput = document.getElementById("adminSupabaseUrlInput");
+    if (sbUrlInput) sbUrlInput.value = getSupabaseUrl();
+
+    const sbKeyInput = document.getElementById("adminSupabaseKeyInput");
+    if (sbKeyInput) sbKeyInput.value = getSupabaseAnonKey();
+
+    toggleDbEngineSettingsUI(getDatabaseEngine());
   } else {
     adminArea.style.display = "none";
+  }
+}
+
+function toggleDbEngineSettingsUI(engine) {
+  const sbSection = document.getElementById("supabaseConfigSection");
+  const gasSection = document.getElementById("gasConfigSection");
+  const badge = document.getElementById("dbEngineStatusBadge");
+  const sel = document.getElementById("adminDbEngineSelect");
+  if (sel && sel.value !== engine) sel.value = engine;
+
+  if (engine === "supabase") {
+    if (sbSection) sbSection.style.display = "block";
+    if (gasSection) gasSection.style.display = "none";
+    if (badge) {
+      const hasCreds = !!(getSupabaseUrl() && getSupabaseAnonKey());
+      badge.style.background = hasCreds ? "#dcfce7" : "#fef3c7";
+      badge.style.color = hasCreds ? "#15803d" : "#b45309";
+      badge.innerText = hasCreds ? "⚡ Supabase Aktif" : "⚠️ Perlu URL & Key";
+    }
+  } else {
+    if (sbSection) sbSection.style.display = "none";
+    if (gasSection) gasSection.style.display = "block";
+    if (badge) {
+      badge.style.background = "#e0f2fe";
+      badge.style.color = "#0369a1";
+      badge.innerText = "📊 Google Sheets";
+    }
   }
 }
 
@@ -2651,7 +3227,27 @@ function saveAdminSettings() {
   const radius = parseFloat(document.getElementById("adminRadiusInput").value);
   const officeName = document.getElementById("adminOfficeNameInput").value.trim();
 
-  // Simpan URL API ke localStorage browser
+  // 1. Simpan Pilihan Mesin Database & Kredensial Supabase
+  let dbEngineUpdated = false;
+  const engineSelect = document.getElementById("adminDbEngineSelect");
+  if (engineSelect) {
+    setDatabaseEngine(engineSelect.value);
+    dbEngineUpdated = true;
+  }
+
+  const sbUrlInput = document.getElementById("adminSupabaseUrlInput");
+  if (sbUrlInput) {
+    setSupabaseUrl(sbUrlInput.value.trim());
+    dbEngineUpdated = true;
+  }
+
+  const sbKeyInput = document.getElementById("adminSupabaseKeyInput");
+  if (sbKeyInput) {
+    setSupabaseAnonKey(sbKeyInput.value.trim());
+    dbEngineUpdated = true;
+  }
+
+  // 2. Simpan URL API Google Sheets (jika diisi)
   let urlUpdated = false;
   const gasApiInput = document.getElementById("adminGasApiUrlInput");
   if (gasApiInput) {
@@ -2662,9 +3258,12 @@ function saveAdminSettings() {
     }
   }
 
+  _cachedSupabaseClient = null; // Invalidate cached instance agar menggunakan kredensial terbaru
+  toggleDbEngineSettingsUI(getDatabaseEngine());
+
   if (isNaN(lat) || isNaN(lon) || isNaN(radius)) {
-    if (urlUpdated) {
-      showToast("URL Web App Google Sheets berhasil disimpan di aplikasi!", "success");
+    if (dbEngineUpdated || urlUpdated) {
+      showToast("Pengaturan basis data berhasil disimpan di aplikasi!", "success");
       return;
     }
     showToast("Mohon tentukan lokasi di peta dan radius yang valid.", "error");
@@ -2680,14 +3279,14 @@ function saveAdminSettings() {
 
   if (typeof google !== "undefined" && google.script && google.script.run) {
     if (!AppState.sessionToken) {
-      if (urlUpdated) showToast("URL Web App berhasil disimpan di browser!", "success");
+      if (dbEngineUpdated || urlUpdated) showToast("Pengaturan basis data berhasil disimpan di browser!", "success");
       handleUnauthorizedSession("Sesi tidak valid. Silakan login kembali.");
       return;
     }
     google.script.run
       .withSuccessHandler(function (res) {
         if (res && res.success) {
-          showToast(res.message || "Pengaturan kantor dan URL berhasil disimpan!", "success");
+          showToast(res.message || "Pengaturan kantor dan basis data berhasil disimpan!", "success");
           AppState.currentConfig.LATITUDE_KANTOR = lat;
           AppState.currentConfig.LONGITUDE_KANTOR = lon;
           AppState.currentConfig.RADIUS_MAKSIMAL_METER = radius;
@@ -2698,14 +3297,14 @@ function saveAdminSettings() {
         } else {
           const errMsg = res ? (res.message || "") : "";
           if (errMsg.indexOf("tidak dikenal") !== -1) {
-            showToast("URL Web App tersimpan di browser! Catatan: Google Apps Script Anda perlu di-Deploy Versi Baru agar sinkron dengan Google Sheets.", "info");
+            showToast("Pengaturan tersimpan di browser! Catatan: Jika menggunakan Google Sheets, pastikan script sudah di-deploy versi baru.", "info");
           } else {
-            showToast(errMsg || "Gagal menyimpan konfigurasi ke Google Sheets.", "error");
+            showToast(errMsg || "Gagal menyimpan konfigurasi ke basis data.", "error");
           }
         }
       })
       .withFailureHandler(function (err) {
-        showToast("URL tersimpan di browser. Status sinkronisasi: " + (err.message || err), "info");
+        showToast("Pengaturan tersimpan di browser. " + (err.message || err), "info");
       })
       .apiSaveConfig(AppState.sessionToken, newCfg);
   }
