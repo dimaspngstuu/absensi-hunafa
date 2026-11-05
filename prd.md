@@ -282,6 +282,17 @@ ZONA 2: MASTER CONTEXT & LOGIKA SISTEM TERKINI (LIVING CONTEXT)
   * **Arsitektur Dual-Engine: Migrasi Penuh ke Supabase Cloud (High-Speed & Realtime)**:
     - Mengatasi masalah latensi lambat Google Sheets (1.5-4 detik) dengan migrasi ke **Supabase Cloud PostgreSQL** berlatensi ultra-rendah (30-80 ms).
     - Memasang skema database terstruktur di [supabase_schema.sql](file:///c:/Users/dimas/.gemini/antigravity-ide/project/absensi_pegawai/supabase_schema.sql) untuk tabel `karyawan`, `presensi`, `pengajuan_izin`, `config`, serta bucket penyimpanan foto `attendance-photos`.
-    - Mengintegrasikan `@supabase/supabase-js` via CDN di [index.html](file:///c:/Users/dimas/.gemini/antigravity-ide/project/absensi_pegawai/index.html) dan menyusun adapter query Supabase lengkap di [app.js](file:///c:/Users/dimas/.gemini/antigravity-ide/project/absensi_pegawai/app.js).
+    - Mengintegrasikan `@supabase/supabase-js` via CDN di [index.html](file:///c:/Users/dimas/.gemini/antigravity-ide/project\absensi_pegawai\index.html) dan menyusun adapter query Supabase lengkap di [app.js](file:///c:/Users/dimas/.gemini/antigravity-ide/project\absensi_pegawai\app.js).
     - Menambahkan fitur **Supabase Realtime**: Pemantauan presensi hari ini pada dashboard Admin ter-update secara otomatis detik itu juga ketika ada pegawai yang melakukan presensi tanpa perlu reload halaman.
     - Menyediakan panel pemilihan mesin database (*Supabase Cloud* vs *Google Sheets*) pada Tab Pengaturan Admin sehingga transisi dapat dilakukan secara mulus tanpa *breaking change*.
+- **Penyelarasan Sistem Terkini (v3.0.1 - 5 November 2026)**:
+  * **Anti-Lockout Dual Verification & 1-Click Migration**:
+    - Menambahkan fallback otomatis saat login: jika akun belum disinkronkan ke Supabase, sistem seketika memverifikasi ke Google Sheets sehingga pengguna tidak pernah terkunci.
+    - Sakelar mesin database instan langsung di halaman login modal (`#loginDbEngineBadgeBtn`).
+    - Tombol migrasi 1-klik di Pengaturan Admin (`migrateDataFromSheetsToSupabase`) untuk menyalin seluruh data Karyawan, Riwayat Presensi, dan Pengajuan Izin dari Google Sheets ke Supabase.
+- **Penyelarasan Sistem Terkini (v3.0.2 - 5 November 2026)**:
+  * **Penyempurnaan Logo Tab Browser, Label Navigasi & Fitur Kelola Pegawai In-App (CRUD)**:
+    - **Logo Tab Browser Resmi (Favicon)**: Mengganti link Google Drive eksternal dengan *High-Res Vector SVG Data-URI* yang kebal blokir cross-origin browser. Logo kubah Al Hunafa nuansa *Deep Sage Green* dan aksen emas tampil tajam di seluruh browser.
+    - **Navigasi Bawah**: Memperbarui label menu pengajuan menjadi **"Izin / Lembur"** dengan ikon gabungan *Document-Clock* yang proporsional di seluruh ukuran layar ponsel.
+    - **Perhitungan Jam Lembur**: Formulir lembur menghitung jam mulai, jam selesai, dan total jam lembur secara otomatis, tersimpan rapi baik di Supabase maupun Google Sheets.
+    - **Manajemen Pegawai Lengkap (Admin CRUD)**: Menambahkan panel pengelolaan pegawai di Pengaturan Admin untuk menambah pegawai baru (`+ Tambah Pegawai`), mengubah data profil/role/PIN (`✏️ Edit`), dan menghapus pegawai (`🗑️ Hapus`) langsung di dalam aplikasi tanpa perlu membuka spreadsheet.

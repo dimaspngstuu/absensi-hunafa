@@ -52,9 +52,9 @@ function setSupabaseAnonKey(key) {
 function getDatabaseEngine() {
   const saved = localStorage.getItem("alhunafa_db_engine");
   if (saved) return saved;
-  // Default otomatis menggunakan Supabase jika kredensial terisi, atau fallback ke sheets jika kosong
+  // Otomatis aktifkan Supabase jika kredensial terisi, atau fallback ke Google Sheets jika belum diisi
   if (getSupabaseUrl() && getSupabaseAnonKey()) return "supabase";
-  return "supabase";
+  return "sheets";
 }
 
 function setDatabaseEngine(engine) {
@@ -196,10 +196,45 @@ if (typeof google === "undefined" || !google.script || !google.script.run) {
       }
     };
 
+    function executeGasRequest(action, payload, onOk, onFail) {
+      const okFn = onOk || successCb;
+      const failFn = onFail || failureCb;
+      const gasUrl = getGasApiUrl();
+      if (!gasUrl) {
+        setTimeout(function () {
+          failFn(new Error("Koneksi Database belum diatur. Silakan atur Supabase atau URL Web App Google Sheets di menu Pengaturan."));
+        }, 80);
+        return;
+      }
+
+      const bodyData = JSON.stringify(Object.assign({ action: action }, payload || {}));
+      fetch(gasUrl, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: bodyData
+      })
+        .then(function (res) {
+          if (!res.ok) throw new Error("HTTP Status " + res.status);
+          return res.json();
+        })
+        .then(function (data) {
+          okFn(data);
+        })
+        .catch(function (err) {
+          console.warn("GAS Fetch Error:", err);
+          let userMsg = err.message || String(err);
+          if (userMsg.indexOf("Failed to fetch") !== -1 || userMsg.indexOf("NetworkError") !== -1) {
+            userMsg = "Failed to fetch: Pastikan Deployment Google Apps Script disetel 'Siapa yang memiliki akses' = 'Siapa saja (Anyone)' dan link berakhiran '/exec'.";
+          }
+          failFn(new Error(userMsg));
+        });
+    }
+
     async function executeSupabaseRequest(action, payload) {
       const client = getSupabaseClient();
       if (!client) {
-        failureCb(new Error("Koneksi Supabase belum diatur. Silakan masukkan Project URL & Anon Key di Pengaturan."));
+        // Fallback langsung ke Google Sheets jika klien Supabase belum siap
+        executeGasRequest(action, payload);
         return;
       }
 
@@ -207,17 +242,27 @@ if (typeof google === "undefined" || !google.script || !google.script.run) {
         if (action === "login") {
           const clean = String(payload.identifier || "").trim().toLowerCase();
           const cleanPin = String(payload.pin || "").trim();
-          const { data, error } = await client.from("karyawan").select("*");
-          if (error) throw error;
+          let row = null;
+          let sbSuccess = false;
 
-          const row = (data || []).find(function (r) {
-            const rNip = String(r.nip || "").trim().toLowerCase();
-            const rEmail = String(r.email || "").trim().toLowerCase();
-            const rUser = String(r.username || "").trim().toLowerCase();
-            return (rNip === clean || rEmail === clean || rUser === clean);
-          });
+          try {
+            const { data, error } = await client.from("karyawan").select("*");
+            if (!error && Array.isArray(data)) {
+              row = data.find(function (r) {
+                const rNip = String(r.nip || "").trim().toLowerCase();
+                const rEmail = String(r.email || "").trim().toLowerCase();
+                const rUser = String(r.username || "").trim().toLowerCase();
+                return (rNip === clean || rEmail === clean || rUser === clean);
+              });
+              if (row && String(row.pin).trim() === cleanPin) {
+                sbSuccess = true;
+              }
+            }
+          } catch (eSb) {
+            console.warn("Supabase query notice saat login, beralih ke Sheets:", eSb);
+          }
 
-          if (row && String(row.pin).trim() === cleanPin) {
+          if (sbSuccess && row) {
             if (row.is_active === false) {
               return successCb({ success: false, message: "Akun Anda saat ini sedang dinonaktifkan." });
             }
@@ -235,10 +280,27 @@ if (typeof google === "undefined" || !google.script || !google.script.run) {
             };
             return successCb({ success: true, token: sessionToken, user: sessionUser, message: "Login berhasil!" });
           }
-          return successCb({ success: false, message: "Email/Username atau PIN yang Anda masukkan salah." });
+
+          // JIKA TIDAK DITEMUKAN DI SUPABASE ATAU TABLE BELUM ADA:
+          // OTOMATIS VALIDASI KE GOOGLE SHEETS AGAR TIDAK TERKUNCI!
+          executeGasRequest("login", payload, function (gasRes) {
+            if (gasRes && gasRes.success) {
+              successCb(gasRes);
+            } else {
+              successCb({ success: false, message: (gasRes && gasRes.message) ? gasRes.message : "Email/Username atau PIN yang Anda masukkan salah." });
+            }
+          }, function (gasErr) {
+            failureCb(new Error(gasErr.message || "Gagal login ke server."));
+          });
+          return;
         }
 
         if (action === "getDashboard") {
+          // Jika token sesi berasal dari Google Sheets, ambil data dari Google Sheets!
+          if (payload.token && !String(payload.token).startsWith("sb_")) {
+            executeGasRequest("getDashboard", payload);
+            return;
+          }
           const todayStr = getJakartaDateString();
           const currentMonthStr = todayStr.substring(0, 7);
           const idKaryawan = payload.idKaryawan || (AppState.currentUser ? AppState.currentUser.idKaryawan : "");
@@ -566,10 +628,73 @@ if (typeof google === "undefined" || !google.script || !google.script.run) {
           return successCb({ success: true, karyawanList: kList || [], config: AppState.currentConfig });
         }
 
+        if (action === "getKaryawanList") {
+          const { data: kList, error: kListErr } = await client.from("karyawan").select("*").order("nama", { ascending: true });
+          if (kListErr) throw kListErr;
+          const mapped = (kList || []).map(function (k) {
+            return {
+              idKaryawan: k.id,
+              nip: k.nip,
+              nama: k.nama,
+              role: k.role,
+              jabatan: k.jabatan,
+              pin: k.pin,
+              status: k.status || "Aktif",
+              fotoUrl: k.foto_url || ""
+            };
+          });
+          return successCb({ success: true, data: mapped });
+        }
+
         if (action === "saveKaryawan") {
-          const { error: skErr } = await client.from("karyawan").upsert(payload.karyawan);
-          if (skErr) throw skErr;
-          return successCb({ success: true, message: "Data karyawan berhasil disimpan!" });
+          const k = payload.karyawan || {};
+          const nip = String(k.nip || "").trim();
+          const nama = String(k.nama || "").trim();
+          const role = String(k.role || "Pegawai").trim();
+          const jabatan = String(k.jabatan || "Staff").trim();
+          const pin = String(k.pin || "123456").trim();
+          const status = String(k.status || "Aktif").trim();
+
+          if (!nip || !nama) {
+            return successCb({ success: false, message: "NIP dan Nama Pegawai wajib diisi." });
+          }
+
+          if (k.idKaryawan) {
+            const updateObj = { nip: nip, nama: nama, role: role, jabatan: jabatan, status: status };
+            if (k.pin) updateObj.pin = pin;
+            const { error: updErr } = await client.from("karyawan")
+              .update(updateObj)
+              .eq("id", k.idKaryawan);
+            if (updErr) throw updErr;
+            return successCb({ success: true, message: "Data pegawai berhasil diperbarui di Supabase!" });
+          } else {
+            const { data: dup } = await client.from("karyawan").select("id").eq("nip", nip).maybeSingle();
+            if (dup) {
+              return successCb({ success: false, message: "NIP " + nip + " sudah terdaftar di sistem." });
+            }
+            const newId = "PEG-" + Date.now();
+            const { error: insErr } = await client.from("karyawan").insert({
+              id: newId,
+              nip: nip,
+              nama: nama,
+              role: role,
+              jabatan: jabatan,
+              pin: pin,
+              status: status
+            });
+            if (insErr) throw insErr;
+            return successCb({ success: true, message: "Pegawai baru berhasil ditambahkan ke Supabase!" });
+          }
+        }
+
+        if (action === "deleteKaryawan") {
+          const targetId = String(payload.idKaryawan || "").trim();
+          if (!targetId) {
+            return successCb({ success: false, message: "ID Pegawai tidak valid." });
+          }
+          const { error: delErr } = await client.from("karyawan").delete().eq("id", targetId);
+          if (delErr) throw delErr;
+          return successCb({ success: true, message: "Pegawai berhasil dihapus dari Supabase!" });
         }
 
         if (action === "logout") {
@@ -593,36 +718,8 @@ if (typeof google === "undefined" || !google.script || !google.script.run) {
         return;
       }
 
-      // Fallback ke Google Apps Script Web App (Klasik)
-      const gasUrl = getGasApiUrl();
-      if (!gasUrl) {
-        setTimeout(function () {
-          failureCb(new Error("Koneksi Database belum diatur. Silakan atur Supabase atau URL Web App Google Sheets di menu Pengaturan."));
-        }, 80);
-        return;
-      }
-
-      const bodyData = JSON.stringify(Object.assign({ action: action }, payload || {}));
-      fetch(gasUrl, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: bodyData
-      })
-        .then(function (res) {
-          if (!res.ok) throw new Error("HTTP Status " + res.status);
-          return res.json();
-        })
-        .then(function (data) {
-          successCb(data);
-        })
-        .catch(function (err) {
-          console.warn("GAS Fetch Error:", err);
-          let userMsg = err.message || String(err);
-          if (userMsg.indexOf("Failed to fetch") !== -1 || userMsg.indexOf("NetworkError") !== -1) {
-            userMsg = "Failed to fetch: Pastikan Deployment Google Apps Script disetel 'Siapa yang memiliki akses' = 'Siapa saja (Anyone)' dan link berakhiran '/exec'.";
-          }
-          failureCb(new Error(userMsg));
-        });
+      // Default: Google Apps Script Web App (Klasik)
+      executeGasRequest(action, payload || {});
     }
 
     runner.apiLogin = function (identifier, pin) {
@@ -652,8 +749,14 @@ if (typeof google === "undefined" || !google.script || !google.script.run) {
     runner.apiGetAdminDashboard = function (token) {
       sendRequest("getAdminDashboard", { token: token });
     };
+    runner.apiGetKaryawanList = function (token) {
+      sendRequest("getKaryawanList", { token: token });
+    };
     runner.apiSaveKaryawan = function (token, karyawan) {
       sendRequest("saveKaryawan", { token: token, karyawan: karyawan });
+    };
+    runner.apiDeleteKaryawan = function (token, idKaryawan) {
+      sendRequest("deleteKaryawan", { token: token, idKaryawan: idKaryawan });
     };
     runner.apiSearchGoogleMapsLocation = function (token, query) {
       sendRequest("searchGoogleMapsLocation", { token: token, query: query });
@@ -817,6 +920,7 @@ document.addEventListener("DOMContentLoaded", function () {
   startRealTimeClock();
   initDefaultReportDates();
   initIdleSessionTracker();
+  updateLoginDbEngineBadge();
 
   const savedTab = localStorage.getItem("alhunafa_active_tab") || "Home";
 
@@ -2445,6 +2549,7 @@ function updateSettingsView() {
     if (sbKeyInput) sbKeyInput.value = getSupabaseAnonKey();
 
     toggleDbEngineSettingsUI(getDatabaseEngine());
+    fetchAndRenderAdminEmployees();
   } else {
     adminArea.style.display = "none";
   }
@@ -2474,6 +2579,153 @@ function toggleDbEngineSettingsUI(engine) {
       badge.style.color = "#0369a1";
       badge.innerText = "📊 Google Sheets";
     }
+  }
+}
+
+/**
+ * ==============================================================================
+ * ALAT MIGRASI 1-KLIK: SALIN SELURUH DATA LAMA DARI GOOGLE SHEETS KE SUPABASE
+ * ==============================================================================
+ */
+async function migrateDataFromSheetsToSupabase() {
+  const sbClient = getSupabaseClient();
+  if (!sbClient) {
+    showToast("Silakan masukkan Project URL & Anon Key Supabase terlebih dahulu di atas.", "error");
+    return;
+  }
+  const gasUrl = getGasApiUrl();
+  if (!gasUrl) {
+    showToast("URL Web App Google Sheets belum terdaftar.", "error");
+    return;
+  }
+
+  const confirmMsg = "Apakah Anda ingin menarik dan menyalin seluruh data dari Google Sheets (Karyawan, Presensi, dan Izin) ke Supabase sekarang?\n\nData di Google Sheets Anda akan tetap aman dan tidak akan terhapus.";
+  if (!confirm(confirmMsg)) {
+    return;
+  }
+
+  const btn = document.getElementById("btnMigrateSheetsToSupabase");
+  if (btn) {
+    btn.disabled = true;
+    btn.innerText = "⏳ Mengunduh data dari Google Sheets...";
+  }
+
+  showToast("Mengunduh data dari Google Sheets...", "info");
+
+  try {
+    // 1. Ambil Data Karyawan dari Google Apps Script
+    const resKaryawan = await fetch(gasUrl, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: "getAdminDashboard", token: AppState.sessionToken || "temp" })
+    }).then(r => r.json());
+
+    let countKaryawan = 0;
+    if (resKaryawan && resKaryawan.success && Array.isArray(resKaryawan.karyawanList)) {
+      const mappedKaryawan = resKaryawan.karyawanList.map(function (k, i) {
+        return {
+          id: String(k.id || k.nip || ("PEG-" + (i + 1))).trim(),
+          nip: String(k.nip || k.id || ("NIP-" + (i + 1))).trim(),
+          nama: String(k.nama || "Pegawai").trim(),
+          role: String(k.role || "Pegawai").trim(),
+          jabatan: String(k.jabatan || "Staff").trim(),
+          pin: String(k.pin || "123456").trim(),
+          is_active: k.aktif !== false,
+          foto_url: k.foto || "",
+          email: k.email || "",
+          username: k.username || ""
+        };
+      });
+      if (mappedKaryawan.length > 0) {
+        const { error: errK } = await sbClient.from("karyawan").upsert(mappedKaryawan, { onConflict: "nip" });
+        if (errK) console.warn("Supabase karyawan upsert error:", errK);
+        else countKaryawan = mappedKaryawan.length;
+      }
+    }
+
+    // 2. Ambil Riwayat Presensi dari Google Apps Script
+    const resPresensi = await fetch(gasUrl, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: "getFilteredReport", token: AppState.sessionToken || "temp", startDate: "2020-01-01", endDate: "2035-12-31" })
+    }).then(r => r.json());
+
+    let countPresensi = 0;
+    if (resPresensi && resPresensi.success && Array.isArray(resPresensi.data)) {
+      const mappedPresensi = resPresensi.data.map(function (p, i) {
+        return {
+          id: String(p.idPresensi || ("PRES-" + (i + 1) + "_" + Date.now())).trim(),
+          id_karyawan: String(p.idKaryawan || p.nama || "PEG").trim(),
+          nama_karyawan: String(p.nama || "Pegawai").trim(),
+          tanggal: p.tanggal || getJakartaDateString(),
+          check_in_time: p.checkIn || null,
+          check_in_status: "Hadir",
+          check_in_distance: 0,
+          check_in_photo: p.fotoMasukUrl || "",
+          check_out_time: (p.checkOut && p.checkOut !== "-") ? p.checkOut : null,
+          check_out_status: (p.checkOut && p.checkOut !== "-") ? "Selesai" : null,
+          check_out_distance: 0,
+          check_out_photo: p.fotoPulangUrl || "",
+          total_hours: p.totalHours || "-",
+          lokasi: p.lokasi || "Kantor"
+        };
+      });
+
+      if (mappedPresensi.length > 0) {
+        for (let b = 0; b < mappedPresensi.length; b += 50) {
+          const chunk = mappedPresensi.slice(b, b + 50);
+          await sbClient.from("presensi").upsert(chunk, { onConflict: "id" });
+        }
+        countPresensi = mappedPresensi.length;
+      }
+    }
+
+    // 3. Ambil Pengajuan Izin dari Google Apps Script
+    const resIzin = await fetch(gasUrl, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: "getIzinList", token: AppState.sessionToken || "temp" })
+    }).then(r => r.json());
+
+    let countIzin = 0;
+    if (resIzin && resIzin.success && Array.isArray(resIzin.data)) {
+      const mappedIzin = resIzin.data.map(function (iz, i) {
+        return {
+          id: String(iz.idPengajuan || ("IZIN-" + (i + 1) + "_" + Date.now())).trim(),
+          id_karyawan: String(iz.idKaryawan || "PEG").trim(),
+          nama_karyawan: String(iz.nama || "Pegawai").trim(),
+          jenis: String(iz.jenis || "Izin").trim(),
+          tgl_mulai: iz.tglMulai || getJakartaDateString(),
+          tgl_selesai: iz.tglSelesai || getJakartaDateString(),
+          alasan: iz.alasan || "-",
+          bukti_url: iz.bukti || "-",
+          status: iz.status || "Menunggu"
+        };
+      });
+
+      if (mappedIzin.length > 0) {
+        const { error: errIz } = await sbClient.from("pengajuan_izin").upsert(mappedIzin, { onConflict: "id" });
+        if (errIz) console.warn("Supabase izin upsert error:", errIz);
+        else countIzin = mappedIzin.length;
+      }
+    }
+
+    if (btn) {
+      btn.disabled = false;
+      btn.innerText = "✓ Berhasil Disalin (" + countKaryawan + " Pegawai, " + countPresensi + " Presensi, " + countIzin + " Izin)";
+      btn.style.borderColor = "#15803d";
+      btn.style.color = "#15803d";
+    }
+
+    showToast("Berhasil! " + countKaryawan + " Pegawai, " + countPresensi + " Presensi, & " + countIzin + " Izin tersinkron ke Supabase!", "success");
+    loadInitialData(true);
+  } catch (err) {
+    console.error("Migration error:", err);
+    if (btn) {
+      btn.disabled = false;
+      btn.innerText = "📥 Salin Semua Data Lama dari Google Sheets ke Supabase (1-Klik)";
+    }
+    showToast("Gagal menyalin data: " + (err.message || err), "error");
   }
 }
 
@@ -3316,7 +3568,37 @@ function openLoginModal() {
   if (backBtn) {
     backBtn.style.display = AppState.currentUser ? "flex" : "none";
   }
+  updateLoginDbEngineBadge();
   modal.classList.add("open");
+}
+
+function updateLoginDbEngineBadge() {
+  const engine = getDatabaseEngine();
+  const label = document.getElementById("loginDbEngineLabel");
+  const dot = document.getElementById("loginDbEngineDot");
+  if (!label || !dot) return;
+
+  if (engine === "supabase" && getSupabaseUrl() && getSupabaseAnonKey()) {
+    label.innerText = "Mesin: Supabase Cloud";
+    dot.style.background = "#16a34a";
+  } else {
+    label.innerText = "Mesin: Google Sheets";
+    dot.style.background = "#0284c7";
+  }
+}
+
+function toggleLoginDatabaseEngine() {
+  const current = getDatabaseEngine();
+  const next = (current === "supabase") ? "sheets" : "supabase";
+  setDatabaseEngine(next);
+  _cachedSupabaseClient = null;
+  updateLoginDbEngineBadge();
+  toggleDbEngineSettingsUI(next);
+  if (next === "sheets") {
+    showToast("Mesin login dialihkan ke: Google Sheets (Klasik)", "info");
+  } else {
+    showToast("Mesin login dialihkan ke: Supabase Cloud", "info");
+  }
 }
 
 function closeLoginModal() {
@@ -3581,4 +3863,366 @@ function showToast(message, type) {
   setTimeout(function () {
     toast.classList.remove("show");
   }, 3500);
+}
+
+/**
+ * ==============================================================================
+ * MODUL PENGELOLA DATA PEGAWAI & GURU (TAMBAH, EDIT, HAPUS - ADMIN CRUD)
+ * ==============================================================================
+ */
+let adminEmployeesData = [];
+let adminEmployeeSearchFilter = "";
+
+function fetchAndRenderAdminEmployees(force) {
+  const container = document.getElementById("adminEmployeeListContainer");
+  if (!container) return;
+
+  function renderList(list) {
+    adminEmployeesData = list || [];
+    let displayList = list || [];
+
+    if (adminEmployeeSearchFilter) {
+      const q = adminEmployeeSearchFilter.toLowerCase();
+      displayList = displayList.filter(function (e) {
+        return (e.nama && e.nama.toLowerCase().includes(q)) ||
+               (e.nip && String(e.nip).toLowerCase().includes(q)) ||
+               (e.jabatan && e.jabatan.toLowerCase().includes(q));
+      });
+    }
+
+    if (!displayList || displayList.length === 0) {
+      container.innerHTML = '<div style="text-align: center; padding: 20px; font-size: 12.5px; color: var(--text-muted); background: #f8fafc; border-radius: var(--radius-sm); border: 1px dashed #cbd5e1;">' +
+        (adminEmployeeSearchFilter ? 'Tidak ada pegawai yang cocok dengan pencarian "' + adminEmployeeSearchFilter + '".' : 'Belum ada data pegawai.') +
+        '</div>';
+      return;
+    }
+
+    const avatarGradients = [
+      'linear-gradient(135deg, #10b981, #059669)',
+      'linear-gradient(135deg, #6366f1, #4f46e5)',
+      'linear-gradient(135deg, #06b6d4, #0891b2)',
+      'linear-gradient(135deg, #f59e0b, #d97706)',
+      'linear-gradient(135deg, #ec4899, #db2777)',
+      'linear-gradient(135deg, #8b5cf6, #7c3aed)',
+      'linear-gradient(135deg, #3b82f6, #2563eb)'
+    ];
+
+    let html = "";
+    displayList.forEach(function (emp, idx) {
+      const empId = emp.idKaryawan || emp.id || ("EMP-" + idx);
+      const nama = emp.nama || emp.nama_karyawan || "-";
+      const nip = emp.nip || "-";
+      const jabatan = emp.jabatan || "Staff";
+      const role = emp.role || "Pegawai";
+      const status = emp.status || "Aktif";
+      const isAktif = (status === "Aktif");
+
+      const initials = nama.split(" ").slice(0, 2).map(n => n.charAt(0)).join("").toUpperCase() || "AM";
+      const grad = avatarGradients[idx % avatarGradients.length];
+
+      const roleBadge = role === "Admin"
+        ? '<span style="font-size: 9.5px; font-weight: 700; color: #7c2d12; background: #ffedd5; padding: 2px 6px; border-radius: 999px;">Admin</span>'
+        : '<span style="font-size: 9.5px; font-weight: 700; color: #166534; background: #dcfce7; padding: 2px 6px; border-radius: 999px;">Pegawai</span>';
+
+      const statusBadge = isAktif
+        ? '<span style="font-size: 9.5px; color: #15803d; font-weight: 700;">● Aktif</span>'
+        : '<span style="font-size: 9.5px; color: #dc2626; font-weight: 700;">● Nonaktif</span>';
+
+      html += '<div class="admin-emp-card">' +
+        '<div class="admin-emp-left">' +
+          '<div class="admin-emp-avatar" style="background: ' + grad + ';">' + initials + '</div>' +
+          '<div class="admin-emp-info">' +
+            '<div class="admin-emp-name">' + nama + '</div>' +
+            '<div class="admin-emp-sub">' +
+              '<span>NIP: ' + nip + '</span>' +
+              '<span>•</span>' +
+              '<span>' + jabatan + '</span>' +
+              '<span>•</span>' +
+              roleBadge +
+              statusBadge +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="admin-emp-actions">' +
+          '<button type="button" class="btn-emp-edit" onclick="openEditEmployeeModal(\'' + empId + '\')" title="Edit Data Pegawai">✏️ Edit</button>' +
+          '<button type="button" class="btn-emp-del" onclick="deleteEmployee(\'' + empId + '\', \'' + nama.replace(/'/g, "\\'") + '\')" title="Hapus Pegawai">🗑️</button>' +
+        '</div>' +
+      '</div>';
+    });
+
+    container.innerHTML = html;
+  }
+
+  container.innerHTML = '<div style="text-align: center; padding: 18px; font-size: 12px; color: var(--text-muted);"><div class="btn-spinner" style="margin: 0 auto 6px auto; border-top-color: var(--primary);"></div>Memuat data pegawai...</div>';
+
+  if (typeof google !== "undefined" && google.script && google.script.run) {
+    if (!AppState.sessionToken) return;
+    google.script.run
+      .withSuccessHandler(function (res) {
+        if (res && res.success && res.data) {
+          renderList(res.data);
+        } else if (res && res.karyawanList) {
+          renderList(res.karyawanList);
+        } else {
+          container.innerHTML = '<div style="text-align:center; padding:16px; font-size:12px; color:var(--text-muted);">Belum ada data pegawai.</div>';
+        }
+      })
+      .withFailureHandler(function (err) {
+        container.innerHTML = '<div style="text-align:center; padding:16px; font-size:12px; color:var(--danger);">Gagal memuat pegawai: ' + err.message + '</div>';
+      })
+      .apiGetKaryawanList(AppState.sessionToken);
+  }
+}
+
+function handleSearchEmployee(keyword) {
+  adminEmployeeSearchFilter = String(keyword || "").trim();
+  const container = document.getElementById("adminEmployeeListContainer");
+  if (!container) return;
+
+  if (adminEmployeesData && adminEmployeesData.length > 0) {
+    const avatarGradients = [
+      'linear-gradient(135deg, #10b981, #059669)',
+      'linear-gradient(135deg, #6366f1, #4f46e5)',
+      'linear-gradient(135deg, #06b6d4, #0891b2)',
+      'linear-gradient(135deg, #f59e0b, #d97706)',
+      'linear-gradient(135deg, #ec4899, #db2777)',
+      'linear-gradient(135deg, #8b5cf6, #7c3aed)',
+      'linear-gradient(135deg, #3b82f6, #2563eb)'
+    ];
+
+    const q = adminEmployeeSearchFilter.toLowerCase();
+    const displayList = adminEmployeesData.filter(function (e) {
+      return (e.nama && e.nama.toLowerCase().includes(q)) ||
+             (e.nip && String(e.nip).toLowerCase().includes(q)) ||
+             (e.jabatan && e.jabatan.toLowerCase().includes(q));
+    });
+
+    if (displayList.length === 0) {
+      container.innerHTML = '<div style="text-align: center; padding: 20px; font-size: 12.5px; color: var(--text-muted); background: #f8fafc; border-radius: var(--radius-sm); border: 1px dashed #cbd5e1;">Tidak ada pegawai yang cocok dengan "' + adminEmployeeSearchFilter + '".</div>';
+      return;
+    }
+
+    let html = "";
+    displayList.forEach(function (emp, idx) {
+      const empId = emp.idKaryawan || emp.id || ("EMP-" + idx);
+      const nama = emp.nama || emp.nama_karyawan || "-";
+      const nip = emp.nip || "-";
+      const jabatan = emp.jabatan || "Staff";
+      const role = emp.role || "Pegawai";
+      const status = emp.status || "Aktif";
+      const isAktif = (status === "Aktif");
+
+      const initials = nama.split(" ").slice(0, 2).map(n => n.charAt(0)).join("").toUpperCase() || "AM";
+      const grad = avatarGradients[idx % avatarGradients.length];
+
+      const roleBadge = role === "Admin"
+        ? '<span style="font-size: 9.5px; font-weight: 700; color: #7c2d12; background: #ffedd5; padding: 2px 6px; border-radius: 999px;">Admin</span>'
+        : '<span style="font-size: 9.5px; font-weight: 700; color: #166534; background: #dcfce7; padding: 2px 6px; border-radius: 999px;">Pegawai</span>';
+
+      const statusBadge = isAktif
+        ? '<span style="font-size: 9.5px; color: #15803d; font-weight: 700;">● Aktif</span>'
+        : '<span style="font-size: 9.5px; color: #dc2626; font-weight: 700;">● Nonaktif</span>';
+
+      html += '<div class="admin-emp-card">' +
+        '<div class="admin-emp-left">' +
+          '<div class="admin-emp-avatar" style="background: ' + grad + ';">' + initials + '</div>' +
+          '<div class="admin-emp-info">' +
+            '<div class="admin-emp-name">' + nama + '</div>' +
+            '<div class="admin-emp-sub">' +
+              '<span>NIP: ' + nip + '</span>' +
+              '<span>•</span>' +
+              '<span>' + jabatan + '</span>' +
+              '<span>•</span>' +
+              roleBadge +
+              statusBadge +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="admin-emp-actions">' +
+          '<button type="button" class="btn-emp-edit" onclick="openEditEmployeeModal(\'' + empId + '\')" title="Edit Data Pegawai">✏️ Edit</button>' +
+          '<button type="button" class="btn-emp-del" onclick="deleteEmployee(\'' + empId + '\', \'' + nama.replace(/'/g, "\\'") + '\')" title="Hapus Pegawai">🗑️</button>' +
+        '</div>' +
+      '</div>';
+    });
+    container.innerHTML = html;
+  }
+}
+
+function openAddEmployeeModal() {
+  const modal = document.getElementById("employeeModal");
+  const form = document.getElementById("employeeForm");
+  const title = document.getElementById("employeeModalTitle");
+  const desc = document.getElementById("employeeModalDesc");
+  const idInput = document.getElementById("empInputId");
+  const btn = document.getElementById("btnSubmitEmployee");
+
+  if (form) form.reset();
+  if (idInput) idInput.value = "";
+  if (title) title.innerText = "Tambah Pegawai Baru";
+  if (desc) desc.innerText = "Tambahkan akun pegawai atau guru baru ke sistem absensi.";
+  if (btn) btn.innerText = "Simpan Pegawai Baru";
+
+  const pinInput = document.getElementById("empInputPin");
+  if (pinInput) pinInput.value = "123456";
+
+  if (modal) modal.classList.add("open");
+}
+
+function openEditEmployeeModal(empId) {
+  const modal = document.getElementById("employeeModal");
+  const title = document.getElementById("employeeModalTitle");
+  const desc = document.getElementById("employeeModalDesc");
+  const idInput = document.getElementById("empInputId");
+  const namaInput = document.getElementById("empInputNama");
+  const nipInput = document.getElementById("empInputNip");
+  const jabInput = document.getElementById("empInputJabatan");
+  const roleInput = document.getElementById("empInputRole");
+  const pinInput = document.getElementById("empInputPin");
+  const statusInput = document.getElementById("empInputStatus");
+  const btn = document.getElementById("btnSubmitEmployee");
+
+  const emp = (adminEmployeesData || []).find(function (e) {
+    return String(e.idKaryawan || e.id) === String(empId) || String(e.nip) === String(empId);
+  });
+
+  if (!emp) {
+    showToast("Data pegawai tidak ditemukan.", "error");
+    return;
+  }
+
+  if (idInput) idInput.value = emp.idKaryawan || emp.id || empId;
+  if (namaInput) namaInput.value = emp.nama || emp.nama_karyawan || "";
+  if (nipInput) nipInput.value = emp.nip || "";
+  if (jabInput) jabInput.value = emp.jabatan || "";
+  if (roleInput) roleInput.value = emp.role || "Pegawai";
+  if (pinInput) pinInput.value = emp.pin || "";
+  if (statusInput) statusInput.value = emp.status || "Aktif";
+
+  if (title) title.innerText = "Edit Data Pegawai";
+  if (desc) desc.innerText = "Ubah informasi profil, role, atau PIN login pegawai.";
+  if (btn) btn.innerText = "Perbarui Data Pegawai";
+
+  if (modal) modal.classList.add("open");
+}
+
+function closeEmployeeModal() {
+  const modal = document.getElementById("employeeModal");
+  if (modal) modal.classList.remove("open");
+}
+
+function handleEmployeeFormSubmit(e) {
+  e.preventDefault();
+  const idKaryawan = document.getElementById("empInputId").value.trim();
+  const nama = document.getElementById("empInputNama").value.trim();
+  const nip = document.getElementById("empInputNip").value.trim();
+  const jabatan = document.getElementById("empInputJabatan").value.trim();
+  const role = document.getElementById("empInputRole").value;
+  const pin = document.getElementById("empInputPin").value.trim();
+  const status = document.getElementById("empInputStatus").value;
+  const btn = document.getElementById("btnSubmitEmployee");
+
+  if (!nama || !nip) {
+    showToast("Nama dan NIP wajib diisi.", "error");
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerText = "Menyimpan data...";
+  }
+
+  const payload = {
+    idKaryawan: idKaryawan,
+    nama: nama,
+    nip: nip,
+    jabatan: jabatan,
+    role: role,
+    pin: pin || "123456",
+    status: status
+  };
+
+  if (typeof google !== "undefined" && google.script && google.script.run) {
+    if (!AppState.sessionToken) {
+      if (btn) { btn.disabled = false; btn.innerText = "Simpan Pegawai"; }
+      handleUnauthorizedSession("Sesi berakhir. Silakan login kembali.");
+      return;
+    }
+
+    google.script.run
+      .withSuccessHandler(function (res) {
+        if (btn) { btn.disabled = false; btn.innerText = "Simpan Pegawai"; }
+        if (res && res.success) {
+          closeEmployeeModal();
+          showToast(res.message || "Data pegawai berhasil disimpan!", "success");
+          fetchAndRenderAdminEmployees(true);
+        } else {
+          showToast((res ? res.message : "Gagal menyimpan pegawai."), "error");
+        }
+      })
+      .withFailureHandler(function (err) {
+        if (btn) { btn.disabled = false; btn.innerText = "Simpan Pegawai"; }
+        showToast("Kesalahan server: " + (err.message || err), "error");
+      })
+      .apiSaveKaryawan(AppState.sessionToken, payload);
+  }
+}
+
+function deleteEmployee(empId, empNama) {
+  if (AppState.currentUser && (AppState.currentUser.idKaryawan === empId || AppState.currentUser.nip === empId)) {
+    showToast("Anda tidak dapat menghapus akun Anda sendiri yang sedang aktif digunakan.", "error");
+    return;
+  }
+
+  const confirmMsg = "Apakah Anda yakin ingin menghapus data pegawai \"" + empNama + "\" (" + empId + ") dari sistem?\n\nTindakan ini tidak dapat dibatalkan.";
+  if (!confirm(confirmMsg)) return;
+
+  showToast("Menghapus data pegawai...", "info");
+
+  if (typeof google !== "undefined" && google.script && google.script.run) {
+    if (!AppState.sessionToken) {
+      handleUnauthorizedSession("Sesi berakhir. Silakan login kembali.");
+      return;
+    }
+
+    google.script.run
+      .withSuccessHandler(function (res) {
+        if (res && res.success) {
+          showToast(res.message || "Pegawai berhasil dihapus.", "success");
+          fetchAndRenderAdminEmployees(true);
+        } else {
+          showToast((res ? res.message : "Gagal menghapus data pegawai."), "error");
+        }
+      })
+      .withFailureHandler(function (err) {
+        showToast("Gagal menghapus pegawai: " + (err.message || err), "error");
+      })
+      .apiDeleteKaryawan(AppState.sessionToken, empId);
+  }
+}
+
+/**
+ * Memastikan favicon resmi Al Hunafa selalu terpasang di tab browser (High-Res SVG Vector)
+ */
+function ensureAlHunafaFavicon() {
+  try {
+    const svgFaviconUri = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='bg' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%23234138'/%3E%3Cstop offset='100%25' stop-color='%233d5c52'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='16' fill='url(%23bg)'/%3E%3Ccircle cx='32' cy='32' r='25' fill='none' stroke='%23f59e0b' stroke-width='1.5' stroke-dasharray='3 2' opacity='0.7'/%3E%3Cpath d='M32 14c-1.5 2.5-3 5.5-3 8.5 0 0-4 1.5-4 5.5 0 3 2.5 5 7 5s7-2 7-5c0-4-4-5.5-4-5.5 0-3-1.5-6-3-8.5z' fill='%23f59e0b'/%3E%3Ccircle cx='32' cy='12' r='2' fill='%23fbbf24'/%3E%3Crect x='25' y='34' width='3' height='13' rx='1.5' fill='%23ffffff'/%3E%3Crect x='36' y='34' width='3' height='13' rx='1.5' fill='%23ffffff'/%3E%3Cpath d='M28 34c0-2.2 1.8-4 4-4s4 1.8 4 4v13h-8V34z' fill='%23f59e0b'/%3E%3Cpath d='M30 47v-8c0-1.1.9-2 2-2s2 .9 2 2v8h-4z' fill='%23234138'/%3E%3Crect x='22' y='47' width='20' height='3' rx='1.5' fill='%23ffffff'/%3E%3C/svg%3E";
+    let link = document.querySelector("link[rel*='icon']");
+    if (!link) {
+      link = document.createElement("link");
+      link.rel = "icon";
+      document.head.appendChild(link);
+    }
+    link.type = "image/svg+xml";
+    link.href = svgFaviconUri;
+  } catch (e) {
+    console.warn("Favicon init notice:", e);
+  }
+}
+
+if (typeof document !== "undefined") {
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", ensureAlHunafaFavicon);
+  } else {
+    ensureAlHunafaFavicon();
+  }
 }

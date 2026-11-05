@@ -79,7 +79,7 @@ function doGet(e) {
   return template.evaluate()
     .setTitle("Al Hunafa Attendance - Presensi Karyawan & Guru")
     .addMetaTag("viewport", "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no")
-    .setFaviconUrl("https://lh3.googleusercontent.com/d/1SkgbggMKEV_TVQa3YsiLz8GjtoXeRL5M")
+    .setFaviconUrl("https://drive.google.com/thumbnail?id=1SkgbggMKEV_TVQa3YsiLz8GjtoXeRL5M&sz=w128")
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
@@ -130,6 +130,10 @@ function doPost(e) {
       result = apiSaveConfig(payload.token, payload.newConfig);
     } else if (action === "savekaryawan" || action === "save_karyawan") {
       result = apiSaveKaryawan(payload.token, payload.karyawan);
+    } else if (action === "deletekaryawan" || action === "delete_karyawan") {
+      result = apiDeleteKaryawan(payload.token, payload.idKaryawan);
+    } else if (action === "getkaryawanlist" || action === "get_karyawan_list") {
+      result = apiGetKaryawanList(payload.token);
     } else if (action === "searchgooglemapslocation" || action === "search_google_maps_location") {
       result = apiSearchGoogleMapsLocation(payload.token, payload.query);
     } else if (action === "submitlembur" || action === "submit_lembur") {
@@ -964,6 +968,65 @@ function apiSaveKaryawan(token, karyawan) {
     return { success: false, message: "Gagal menyimpan pegawai: " + err.message };
   } finally {
     lock.releaseLock();
+  }
+}
+
+/**
+ * 7b. API: Hapus Karyawan oleh Admin (TERPROTEKSI KHUSUS ROLE ADMIN)
+ */
+function apiDeleteKaryawan(token, idKaryawan) {
+  var auth = validateSession_(token, "Admin");
+  if (!auth.valid) return { success: false, message: auth.message, code: auth.code };
+
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+    var sheet = getDbSheet("DataKaryawan");
+    var data = sheet.getDataRange().getValues();
+    var targetId = String(idKaryawan || "").trim();
+
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][COL_KARYAWAN.ID]).trim() === targetId || String(data[i][COL_KARYAWAN.NIP]).trim() === targetId) {
+        sheet.deleteRow(i + 1);
+        return { success: true, message: "Data pegawai berhasil dihapus dari sistem." };
+      }
+    }
+    return { success: false, message: "Pegawai dengan ID/NIP tersebut tidak ditemukan." };
+  } catch (err) {
+    return { success: false, message: "Gagal menghapus pegawai: " + err.message };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * 7c. API: Ambil Seluruh Data Karyawan (TERPROTEKSI KHUSUS ROLE ADMIN)
+ */
+function apiGetKaryawanList(token) {
+  var auth = validateSession_(token, "Admin");
+  if (!auth.valid) return { success: false, message: auth.message, code: auth.code };
+
+  try {
+    var sheet = getDbSheet("DataKaryawan");
+    var data = sheet.getDataRange().getValues();
+    var list = [];
+    for (var i = 1; i < data.length; i++) {
+      var row = data[i];
+      if (row[COL_KARYAWAN.ID]) {
+        list.push({
+          idKaryawan: row[COL_KARYAWAN.ID],
+          nip: row[COL_KARYAWAN.NIP],
+          nama: row[COL_KARYAWAN.NAMA],
+          role: row[COL_KARYAWAN.ROLE],
+          jabatan: row[COL_KARYAWAN.JABATAN],
+          pin: row[COL_KARYAWAN.PIN],
+          status: row[COL_KARYAWAN.AKTIF] || "Aktif"
+        });
+      }
+    }
+    return { success: true, data: list };
+  } catch (err) {
+    return { success: false, message: "Gagal memuat data karyawan: " + err.message };
   }
 }
 

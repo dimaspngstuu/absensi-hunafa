@@ -1,28 +1,53 @@
-# REVISI & PENYEMPURNAAN SISTEM: MIGRASI DATABASE DARI GOOGLE SHEETS KE SUPABASE (v3.0.0)
+# REVISI & PENYEMPURNAAN SISTEM: LOGO TAB, NAV IZIN/LEMBUR & CRUD PEGAWAI (v3.0.2)
 ## Projek: Al Hunafa Attendance
 Dokumen Rencana Arsitektur & Transisi Database Berkecepatan Tinggi (by ZettBOT).
 
-Status: **SELESAI DITERAPKAN (v3.0.0 - 5 November 2026)**
+Status: **SELESAI DITERAPKAN (v3.0.2 - 5 November 2026)**
 
 ---
 
-### 1. Analisis Akar Masalah & Solusi
-- **Masalah Google Sheets Lemot**:
-  - Cold-start Google Apps Script (1.5 – 3.0 detik).
-  - Pembacaan sebaris demi sebaris Spreadsheet (800ms – 2500ms).
-  - Konversi foto selfie base64 yang membebani transfer data.
-- **Solusi Rekayasa ZettBOT**:
-  - Mengimplementasikan arsitektur **Supabase Cloud PostgreSQL** berlatensi ultra-rendah (30 – 80 ms).
-  - Menggunakan **Supabase Storage Bucket** (`attendance-photos`) untuk penyimpanan foto presensi secepat kilat.
-  - Mengaktifkan **Supabase Realtime**: Dashboard admin otomatis ter-update seketika saat pegawai melakukan presensi tanpa refresh!
+### 1. Masalah & Solusi Rekayasa (v3.0.2)
+1. **Logo Tab Browser Berubah Menjadi Ikon Bola Dunia (Favicon Hilang)**:
+   - **Akar Masalah**: Tautan favicon sebelumnya mengarah ke Google Drive direct link (`lh3.googleusercontent.com`). Peramban modern (Chrome/Edge) menolak tautan favicon eksternal dari Google Drive karena masalah autentikasi header CORS dan proteksi *hotlinking*.
+   - **Solusi Rekayasa ZettBOT**: Menyematkan **High-Res Vector SVG Favicon langsung via Data-URI** (`data:image/svg+xml,...`) pada `<head>` dan dinjeksi otomatis saat runtime. Logo resmi kubah bernuansa *Deep Sage Green* dan aksen emas Al Hunafa dijamin muncul seketika di tab browser tanpa perlu download jaringan dan 100% bebas dari pemblokiran browser!
+
+2. **Label Navigasi Bawah Masih "Izin"**:
+   - **Akar Masalah**: Pengguna ingin menu pengajuan mencerminkan kedua fungsi utama (Izin dan Lembur).
+   - **Solusi Rekayasa ZettBOT**: Mengubah label navigasi menjadi **"Izin / Lembur"** serta memperbarui ikon menjadi *Document-Clock* yang elegan, dengan penyesuaian lebar elemen agar proporsional dan tidak terpotong di layar ponsel sempit.
+
+3. **Perhitungan Jam Lembur & Total Jam**:
+   - **Solusi Rekayasa ZettBOT**: Formulir lembur dilengkapi input Jam Mulai dan Jam Selesai dengan kalkulator otomatis durasi (misal: "3 Jam 0 Menit (3.0 Jam)"). Waktu lembur divalidasi dan dicatat otomatis baik di Supabase maupun Google Sheets, lengkap dengan chip tampilan `⏰ Jam Mulai - Jam Selesai WIB • Total X Jam` di daftar riwayat.
+
+4. **Kelola Pegawai Langsung di Aplikasi (CRUD Tambah, Edit, Hapus)**:
+   - **Akar Masalah**: Sebelumnya penambahan dan pengeditan pegawai harus dilakukan langsung dengan mengedit lembar Google Sheets atau tabel database.
+   - **Solusi Rekayasa ZettBOT**:
+     * Menambahkan kartu kelola pegawai di menu **Pengaturan Admin** dengan avatar inisial berwarna, NIP, jabatan, dan status.
+     * Fitur pencarian instan nama/NIP pegawai.
+     * Tombol **+ Tambah Pegawai** dan **Edit** membuka modal lengkap (Nama, NIP, Jabatan, Role Admin/Pegawai, PIN, Status Aktif).
+     * Tombol **Hapus** terproteksi konfirmasi (dengan proteksi anti-hapus akun yang sedang login).
+     * Tersinkronisasi dua arah: bekerja mulus di mesin Supabase maupun Google Sheets!
+
+---
+
+# REVISI SEBELUMNYA: MIGRASI DUAL-ENGINE & ANTI-LOCKOUT LOGIN (v3.0.1)
+
+---
+
+### 1. Masalah & Solusi (Mengapa Akun Tidak Bisa Login?)
+- **Akar Masalah**:
+  Saat arsitektur Supabase diaktifkan, sistem secara default mencoba memvalidasi akun ke Supabase. Karena akun-akun pengguna riil masih berada di Google Sheets dan belum disalin ke Supabase, sistem menolak login dan pengguna tidak bisa masuk ke menu Pengaturan untuk mengubah pengaturan kembali ke Google Sheets.
+- **Solusi Rekayasa ZettBOT (v3.0.1 - Anti-Lockout Engine)**:
+  1. **Cross-Engine Automatic Fallback**: Ketika pengguna menekan tombol Login, sistem memeriksa Supabase terlebih dahulu; jika akun belum ditemukan atau Supabase belum siap, sistem **otomatis langsung memvalidasi akun ke Google Sheets**! Pengguna dijamin bisa login tanpa terhalang.
+  2. **Sakelar Mesin di Layar Login**: Menambahkan tombol langsung di layar login (`Mesin: Google Sheets / Supabase`) agar siapapun bisa berpindah mesin basis data langsung dari halaman muka dengan 1 klik sebelum login.
+  3. **Alat Migrasi 1-Klik**: Menambahkan tombol di menu Pengaturan untuk menyalin seluruh data Karyawan, Riwayat Presensi, dan Pengajuan Izin dari Google Sheets ke Supabase dalam hitungan detik.
 
 ---
 
 ### 2. File yang Dibuat & Dimodifikasi
-1. [supabase_schema.sql](file:///c:/Users/dimas/.gemini/antigravity-ide/project/absensi_pegawai/supabase_schema.sql): Skrip DDL SQL siap eksekusi di Supabase SQL Editor (membuat tabel `karyawan`, `presensi`, `pengajuan_izin`, `config`, dan bucket storage).
-2. [index.html](file:///c:/Users/dimas/.gemini/antigravity-ide/project/absensi_pegawai/index.html): Penambahan CDN SDK Supabase JS dan panel konfigurasi database di menu Pengaturan Admin.
-3. [app.js](file:///c:/Users/dimas/.gemini/antigravity-ide/project/absensi_pegawai/app.js): Implementasi Universal Dual-Engine Router (Supabase Cloud + Google Sheets Fallback).
-4. [prd.md](file:///c:/Users/dimas/.gemini/antigravity-ide/project/absensi_pegawai/prd.md): Pembaruan Master Context v3.0.0.
+1. [supabase_schema.sql](file:///c:/Users/dimas/.gemini/antigravity-ide/project/absensi_pegawai/supabase_schema.sql): Skrip DDL SQL untuk Supabase.
+2. [index.html](file:///c:/Users/dimas/.gemini/antigravity-ide/project/absensi_pegawai/index.html): Penambahan sakelar mesin database di layar login dan tombol migrasi 1-klik di Pengaturan.
+3. [app.js](file:///c:/Users/dimas/.gemini/antigravity-ide/project/absensi_pegawai/app.js): Logika verifikasi ganda (Supabase + Google Sheets Fallback), toggle mesin di login modal, dan fungsi `migrateDataFromSheetsToSupabase()`.
+4. [prd.md](file:///c:/Users/dimas/.gemini/antigravity-ide/project/absensi_pegawai/prd.md): Pembaruan Master Context v3.0.1.
 
 ---
 
