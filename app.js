@@ -1307,36 +1307,36 @@ function renderAdminMonitoringView() {
 
     html += '<div class="admin-pegawai-card">' +
       '<div class="pegawai-card-top">' +
-        '<div class="pegawai-profile-group">' +
-          '<div class="pegawai-avatar" style="background:' + gradient + ';">' + initials + '</div>' +
-          '<div class="pegawai-info">' +
-            '<div class="pegawai-name">' + (log.nama || "Pegawai") + '</div>' +
-            '<div class="pegawai-sub">' +
-              '<span class="pegawai-id-badge">' + idBadgeText + '</span>' +
-              '<span class="pegawai-time-hint">Masuk ' + inTimeDisplay + '</span>' +
-            '</div>' +
-          '</div>' +
-        '</div>' +
-        statusBadgeHtml +
+      '<div class="pegawai-profile-group">' +
+      '<div class="pegawai-avatar" style="background:' + gradient + ';">' + initials + '</div>' +
+      '<div class="pegawai-info">' +
+      '<div class="pegawai-name">' + (log.nama || "Pegawai") + '</div>' +
+      '<div class="pegawai-sub">' +
+      '<span class="pegawai-id-badge">' + idBadgeText + '</span>' +
+      '<span class="pegawai-time-hint">Masuk ' + inTimeDisplay + '</span>' +
+      '</div>' +
+      '</div>' +
+      '</div>' +
+      statusBadgeHtml +
       '</div>' +
       '<div class="pegawai-metrics-grid">' +
-        '<div class="pegawai-metric-item">' +
-          '<div class="metric-label">Check In</div>' +
-          '<div class="metric-value text-green">' + inTimeDisplay + '</div>' +
-          '<div class="metric-sub">' + (log.checkInStatus || "Hadir") + '</div>' +
-        '</div>' +
-        '<div class="pegawai-metric-item">' +
-          '<div class="metric-label">Check Out</div>' +
-          '<div class="metric-value ' + (hasCheckedOut ? 'text-blue' : 'text-muted') + '">' + outTimeDisplay + '</div>' +
-          '<div class="metric-sub">' + (hasCheckedOut ? "Pulang" : "Belum Pulang") + '</div>' +
-        '</div>' +
-        '<div class="pegawai-metric-item">' +
-          '<div class="metric-label">Durasi Kerja</div>' +
-          '<div class="metric-value text-dark">' + durationDisplay + '</div>' +
-          '<div class="metric-sub">' + (hasCheckedOut ? "Total Jam" : "Live Berjalan") + '</div>' +
-        '</div>' +
+      '<div class="pegawai-metric-item">' +
+      '<div class="metric-label">Check In</div>' +
+      '<div class="metric-value text-green">' + inTimeDisplay + '</div>' +
+      '<div class="metric-sub">' + (log.checkInStatus || "Hadir") + '</div>' +
       '</div>' +
-    '</div>';
+      '<div class="pegawai-metric-item">' +
+      '<div class="metric-label">Check Out</div>' +
+      '<div class="metric-value ' + (hasCheckedOut ? 'text-blue' : 'text-muted') + '">' + outTimeDisplay + '</div>' +
+      '<div class="metric-sub">' + (hasCheckedOut ? "Pulang" : "Belum Pulang") + '</div>' +
+      '</div>' +
+      '<div class="pegawai-metric-item">' +
+      '<div class="metric-label">Durasi Kerja</div>' +
+      '<div class="metric-value text-dark">' + durationDisplay + '</div>' +
+      '<div class="metric-sub">' + (hasCheckedOut ? "Total Jam" : "Live Berjalan") + '</div>' +
+      '</div>' +
+      '</div>' +
+      '</div>';
   });
 
   adminList.innerHTML = html;
@@ -3885,8 +3885,8 @@ function fetchAndRenderAdminEmployees(force) {
       const q = adminEmployeeSearchFilter.toLowerCase();
       displayList = displayList.filter(function (e) {
         return (e.nama && e.nama.toLowerCase().includes(q)) ||
-               (e.nip && String(e.nip).toLowerCase().includes(q)) ||
-               (e.jabatan && e.jabatan.toLowerCase().includes(q));
+          (e.nip && String(e.nip).toLowerCase().includes(q)) ||
+          (e.jabatan && e.jabatan.toLowerCase().includes(q));
       });
     }
 
@@ -3930,24 +3930,24 @@ function fetchAndRenderAdminEmployees(force) {
 
       html += '<div class="admin-emp-card">' +
         '<div class="admin-emp-left">' +
-          '<div class="admin-emp-avatar" style="background: ' + grad + ';">' + initials + '</div>' +
-          '<div class="admin-emp-info">' +
-            '<div class="admin-emp-name">' + nama + '</div>' +
-            '<div class="admin-emp-sub">' +
-              '<span>NIP: ' + nip + '</span>' +
-              '<span>•</span>' +
-              '<span>' + jabatan + '</span>' +
-              '<span>•</span>' +
-              roleBadge +
-              statusBadge +
-            '</div>' +
-          '</div>' +
+        '<div class="admin-emp-avatar" style="background: ' + grad + ';">' + initials + '</div>' +
+        '<div class="admin-emp-info">' +
+        '<div class="admin-emp-name">' + nama + '</div>' +
+        '<div class="admin-emp-sub">' +
+        '<span>NIP: ' + nip + '</span>' +
+        '<span>•</span>' +
+        '<span>' + jabatan + '</span>' +
+        '<span>•</span>' +
+        roleBadge +
+        statusBadge +
+        '</div>' +
+        '</div>' +
         '</div>' +
         '<div class="admin-emp-actions">' +
-          '<button type="button" class="btn-emp-edit" onclick="openEditEmployeeModal(\'' + empId + '\')" title="Edit Data Pegawai">✏️ Edit</button>' +
-          '<button type="button" class="btn-emp-del" onclick="deleteEmployee(\'' + empId + '\', \'' + nama.replace(/'/g, "\\'") + '\')" title="Hapus Pegawai">🗑️</button>' +
+        '<button type="button" class="btn-emp-edit" onclick="openEditEmployeeModal(\'' + empId + '\')" title="Edit Data Pegawai">✏️ Edit</button>' +
+        '<button type="button" class="btn-emp-del" onclick="deleteEmployee(\'' + empId + '\', \'' + nama.replace(/'/g, "\\'") + '\')" title="Hapus Pegawai">🗑️</button>' +
         '</div>' +
-      '</div>';
+        '</div>';
     });
 
     container.innerHTML = html;
@@ -3993,8 +3993,8 @@ function handleSearchEmployee(keyword) {
     const q = adminEmployeeSearchFilter.toLowerCase();
     const displayList = adminEmployeesData.filter(function (e) {
       return (e.nama && e.nama.toLowerCase().includes(q)) ||
-             (e.nip && String(e.nip).toLowerCase().includes(q)) ||
-             (e.jabatan && e.jabatan.toLowerCase().includes(q));
+        (e.nip && String(e.nip).toLowerCase().includes(q)) ||
+        (e.jabatan && e.jabatan.toLowerCase().includes(q));
     });
 
     if (displayList.length === 0) {
@@ -4025,24 +4025,24 @@ function handleSearchEmployee(keyword) {
 
       html += '<div class="admin-emp-card">' +
         '<div class="admin-emp-left">' +
-          '<div class="admin-emp-avatar" style="background: ' + grad + ';">' + initials + '</div>' +
-          '<div class="admin-emp-info">' +
-            '<div class="admin-emp-name">' + nama + '</div>' +
-            '<div class="admin-emp-sub">' +
-              '<span>NIP: ' + nip + '</span>' +
-              '<span>•</span>' +
-              '<span>' + jabatan + '</span>' +
-              '<span>•</span>' +
-              roleBadge +
-              statusBadge +
-            '</div>' +
-          '</div>' +
+        '<div class="admin-emp-avatar" style="background: ' + grad + ';">' + initials + '</div>' +
+        '<div class="admin-emp-info">' +
+        '<div class="admin-emp-name">' + nama + '</div>' +
+        '<div class="admin-emp-sub">' +
+        '<span>NIP: ' + nip + '</span>' +
+        '<span>•</span>' +
+        '<span>' + jabatan + '</span>' +
+        '<span>•</span>' +
+        roleBadge +
+        statusBadge +
+        '</div>' +
+        '</div>' +
         '</div>' +
         '<div class="admin-emp-actions">' +
-          '<button type="button" class="btn-emp-edit" onclick="openEditEmployeeModal(\'' + empId + '\')" title="Edit Data Pegawai">✏️ Edit</button>' +
-          '<button type="button" class="btn-emp-del" onclick="deleteEmployee(\'' + empId + '\', \'' + nama.replace(/'/g, "\\'") + '\')" title="Hapus Pegawai">🗑️</button>' +
+        '<button type="button" class="btn-emp-edit" onclick="openEditEmployeeModal(\'' + empId + '\')" title="Edit Data Pegawai">✏️ Edit</button>' +
+        '<button type="button" class="btn-emp-del" onclick="deleteEmployee(\'' + empId + '\', \'' + nama.replace(/'/g, "\\'") + '\')" title="Hapus Pegawai">🗑️</button>' +
         '</div>' +
-      '</div>';
+        '</div>';
     });
     container.innerHTML = html;
   }
@@ -4205,18 +4205,12 @@ function deleteEmployee(empId, empNama) {
  */
 function ensureAlHunafaFavicon() {
   try {
-    const svgFaviconUri = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='bg' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%23234138'/%3E%3Cstop offset='100%25' stop-color='%233d5c52'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='16' fill='url(%23bg)'/%3E%3Ccircle cx='32' cy='32' r='25' fill='none' stroke='%23f59e0b' stroke-width='1.5' stroke-dasharray='3 2' opacity='0.7'/%3E%3Cpath d='M32 14c-1.5 2.5-3 5.5-3 8.5 0 0-4 1.5-4 5.5 0 3 2.5 5 7 5s7-2 7-5c0-4-4-5.5-4-5.5 0-3-1.5-6-3-8.5z' fill='%23f59e0b'/%3E%3Ccircle cx='32' cy='12' r='2' fill='%23fbbf24'/%3E%3Crect x='25' y='34' width='3' height='13' rx='1.5' fill='%23ffffff'/%3E%3Crect x='36' y='34' width='3' height='13' rx='1.5' fill='%23ffffff'/%3E%3Cpath d='M28 34c0-2.2 1.8-4 4-4s4 1.8 4 4v13h-8V34z' fill='%23f59e0b'/%3E%3Cpath d='M30 47v-8c0-1.1.9-2 2-2s2 .9 2 2v8h-4z' fill='%23234138'/%3E%3Crect x='22' y='47' width='20' height='3' rx='1.5' fill='%23ffffff'/%3E%3C/svg%3E";
     let link = document.querySelector("link[rel*='icon']");
-    if (!link) {
-      link = document.createElement("link");
-      link.rel = "icon";
-      document.head.appendChild(link);
+    if (link) {
+      link.type = "image/png";
+      link.href = "favicon.png?v=3";
     }
-    link.type = "image/svg+xml";
-    link.href = svgFaviconUri;
-  } catch (e) {
-    console.warn("Favicon init notice:", e);
-  }
+  } catch (e) { }
 }
 
 if (typeof document !== "undefined") {
