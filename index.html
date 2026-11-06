@@ -553,71 +553,23 @@
             <input type="hidden" id="adminLatInput" value="-6.175392">
             <input type="hidden" id="adminLonInput" value="106.827153">
 
-            <div class="form-group"
-              style="margin-top: 16px; padding-top: 14px; border-top: 1.5px dashed var(--border-color);">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                <label class="form-label" style="margin-bottom: 0; font-weight: 800;">⚡ Mesin Basis Data (Database
-                  Engine)</label>
-                <span id="dbEngineStatusBadge"
-                  style="font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #dcfce7; color: #15803d;">Supabase
-                  Siap</span>
+            <!-- Status Basis Data Supabase Cloud (Ringkas & Bersih) -->
+            <div
+              style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: var(--radius-sm); padding: 12px 14px; margin-top: 16px; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span
+                  style="width: 8px; height: 8px; border-radius: 50%; background: #16a34a; display: inline-block;"></span>
+                <span style="font-size: 12px; font-weight: 700; color: #166534;">Basis Data: Supabase Cloud</span>
               </div>
-              <select class="form-select" id="adminDbEngineSelect" onchange="toggleDbEngineSettingsUI(this.value)">
-                <option value="supabase">⚡ Supabase Cloud (Super Cepat, Realtime & Anti-Lemot)</option>
-                <option value="sheets">📊 Google Sheets (Klasik / Google Apps Script)</option>
-              </select>
+              <span id="dbEngineStatusBadge"
+                style="font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #dcfce7; color: #15803d;">100%
+                Aktif</span>
             </div>
 
-            <!-- Bagian Konfigurasi Supabase Cloud -->
-            <div id="supabaseConfigSection"
-              style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: var(--radius-sm); padding: 12px; margin-bottom: 12px;">
-              <div
-                style="font-size: 12px; font-weight: 700; color: #166534; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
-                <span>🟢 Konfigurasi Supabase Cloud</span>
-              </div>
-              <div class="form-group" style="margin-bottom: 8px;">
-                <label class="form-label" style="font-size: 11.5px; color: #166534;">Project URL (Supabase)</label>
-                <input type="url" class="form-input" id="adminSupabaseUrlInput"
-                  placeholder="https://xyzabcdefg.supabase.co" style="border-color: #86efac; font-size: 12px;">
-              </div>
-              <div class="form-group" style="margin-bottom: 6px;">
-                <label class="form-label" style="font-size: 11.5px; color: #166534;">Anon Public Key (API Key)</label>
-                <input type="password" class="form-input" id="adminSupabaseKeyInput" placeholder="eyJhbGciOi..."
-                  style="border-color: #86efac; font-size: 12px;">
-              </div>
-              <div style="font-size: 10.5px; color: #15803d; line-height: 1.4;">
-                Dapatkan Project URL & Anon Key di menu <strong>Project Settings > API</strong> di dashboard Supabase
-                Anda.
-              </div>
-
-              <!-- Tombol Otomatis Salin Data Lama dari Google Sheets ke Supabase -->
-              <div style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed #86efac;">
-                <button type="button" class="btn-secondary" id="btnMigrateSheetsToSupabase"
-                  onclick="migrateDataFromSheetsToSupabase()"
-                  style="width: 100%; font-size: 11.5px; padding: 9px 10px; background: #ffffff; color: #166534; border: 1.5px solid #86efac; font-weight: 700; cursor: pointer; border-radius: 8px;">
-                  📥 Salin Semua Data Lama dari Google Sheets ke Supabase (1-Klik)
-                </button>
-                <div style="font-size: 10px; color: #15803d; margin-top: 4px; text-align: center;">
-                  Menyalin data pegawai, riwayat presensi, dan izin yang ada di Google Sheets ke Supabase agar data lama
-                  tidak hilang.
-                </div>
-              </div>
-            </div>
-
-            <!-- Bagian Konfigurasi Google Sheets (Fallback / Klasik) -->
-            <div id="gasConfigSection"
-              style="display: none; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: var(--radius-sm); padding: 12px; margin-bottom: 12px;">
-              <div class="form-group" style="margin-bottom: 0;">
-                <label class="form-label">🔗 URL Web App Google Sheets (Vercel API Bridge)</label>
-                <input type="url" class="form-input" id="adminGasApiUrlInput"
-                  placeholder="https://script.google.com/macros/s/.../exec">
-                <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
-                  Tempel URL Web App dari Google Apps Script (berakhiran <code>/exec</code>) jika ingin menggunakan mode
-                  Google Sheets.
-                </div>
-              </div>
-            </div>
-
+            <!-- Hidden input agar script pendukung tetap stabil -->
+            <input type="hidden" id="adminDbEngineSelect" value="supabase">
+            <input type="hidden" id="adminSupabaseUrlInput" value="https://xpyltyvkgjwdumrxdsdx.supabase.co">
+            <input type="hidden" id="adminSupabaseKeyInput" value="">
             <button class="btn-primary" onclick="saveAdminSettings()" style="width: 100%; margin-top: 6px;">
               Simpan Pengaturan
             </button>

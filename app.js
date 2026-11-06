@@ -10,7 +10,7 @@
 // DUAL DATABASE ENGINE CONFIGURATION: SUPABASE CLOUD (FAST) & GOOGLE SHEETS
 // ==============================================================================
 const DEFAULT_GAS_API_URL = "https://script.google.com/macros/s/AKfycbzryJei6cFoSKWqn2bp5oMiFElT0gp5tZbs-FiUTEuPGJ-QkQnhCyzWFUw2UAkNaF4/exec";
-const DEFAULT_SUPABASE_URL = "";
+const DEFAULT_SUPABASE_URL = "https://xpyltyvkgjwdumrxdsdx.supabase.co";
 const DEFAULT_SUPABASE_ANON_KEY = "";
 
 function getGasApiUrl() {
@@ -50,11 +50,7 @@ function setSupabaseAnonKey(key) {
 }
 
 function getDatabaseEngine() {
-  const saved = localStorage.getItem("alhunafa_db_engine");
-  if (saved) return saved;
-  // Otomatis aktifkan Supabase jika kredensial terisi, atau fallback ke Google Sheets jika belum diisi
-  if (getSupabaseUrl() && getSupabaseAnonKey()) return "supabase";
-  return "sheets";
+  return "supabase";
 }
 
 function setDatabaseEngine(engine) {
@@ -455,9 +451,8 @@ if (typeof google === "undefined" || !google.script || !google.script.run) {
             if (existing && existing.check_in_time) {
               return successCb({ success: false, message: "Anda sudah melakukan Check-In untuk hari ini pada jam " + existing.check_in_time });
             }
-            const jamMasukStd = cfg.JAM_MASUK_STANDAR || "08:00";
-            const isLate = timeStr.localeCompare(jamMasukStd + ":00") > 0;
-            const status = isLate ? "Terlambat" : "Tepat Waktu";
+            // Ganti 3 baris lama (jamMasukStd, isLate, status) menjadi ini:
+            const status = "Hadir";
             const presId = "PRES-" + Date.now();
 
             const { error: insErr } = await client.from("presensi").insert({
@@ -4211,12 +4206,4 @@ function ensureAlHunafaFavicon() {
       link.href = "favicon.png?v=3";
     }
   } catch (e) { }
-}
-
-if (typeof document !== "undefined") {
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", ensureAlHunafaFavicon);
-  } else {
-    ensureAlHunafaFavicon();
-  }
 }
