@@ -1018,22 +1018,19 @@ function initDefaultReportDates() {
 
   const firstDay = yyyy + "-" + mm + "-01";
   const today = yyyy + "-" + mm + "-" + dd;
-  if (res.stats) {
-    AppState.currentStats = res.stats; // 👈 TAMBAHKAN BARIS INI!
-    const attended = (res.stats && typeof res.stats.totalAttended !== "undefined") ? res.stats.totalAttended : 0;
-    const absence = (res.stats && typeof res.stats.totalAbsence !== "undefined") ? res.stats.totalAbsence : 0;
-    const startInput = document.getElementById("reportStartDate");
-    const endInput = document.getElementById("reportEndDate");
-    if (startInput) startInput.value = firstDay;
-    if (endInput) endInput.value = today;
-  }
 
-  /**
-   * ==========================================================================
-   * FITUR 1: LIVE WORK DURATION TIMER (DIHITUNG DARI CHECK IN)
-   * ==========================================================================
-   */
-  function startLiveWorkTimer() {
+  const startInput = document.getElementById("reportStartDate");
+  const endInput = document.getElementById("reportEndDate");
+  if (startInput) startInput.value = firstDay;
+  if (endInput) endInput.value = today;
+}
+
+/**
+ * ==========================================================================
+ * FITUR 1: LIVE WORK DURATION TIMER (DIHITUNG DARI CHECK IN)
+ * ==========================================================================
+ */
+function startLiveWorkTimer() {
     setInterval(function () {
       const timerDisplay = document.getElementById("workLiveTimerDisplay");
       const statusBadge = document.getElementById("workStatusBadge");
@@ -1145,6 +1142,7 @@ function initDefaultReportDates() {
       AppState.todayRecord = null;
     }
     if (res.stats) {
+      AppState.currentStats = res.stats;
       const attended = (res.stats && typeof res.stats.totalAttended !== "undefined") ? res.stats.totalAttended : 0;
       const absence = (res.stats && typeof res.stats.totalAbsence !== "undefined") ? res.stats.totalAbsence : 0;
 
@@ -4247,4 +4245,3 @@ function initDefaultReportDates() {
       }
     } catch (e) { }
   }
-}
