@@ -11,7 +11,7 @@
 // ==============================================================================
 const DEFAULT_GAS_API_URL = "https://script.google.com/macros/s/AKfycbzryJei6cFoSKWqn2bp5oMiFElT0gp5tZbs-FiUTEuPGJ-QkQnhCyzWFUw2UAkNaF4/exec";
 const DEFAULT_SUPABASE_URL = "https://xpyltyvkgjwdumrxdsdx.supabase.co";
-const DEFAULT_SUPABASE_ANON_KEY = "";
+const DEFAULT_SUPABASE_ANON_KEY = "sb_publishable_K5vCjGB5DbWYgp9qSZ57xg_Wowye_NV";
 
 function getGasApiUrl() {
   return localStorage.getItem("alhunafa_gas_api_url") || DEFAULT_GAS_API_URL || "";
@@ -2588,7 +2588,7 @@ function startLiveWorkTimer() {
         const hasCreds = !!(getSupabaseUrl() && getSupabaseAnonKey());
         badge.style.background = hasCreds ? "#dcfce7" : "#fef3c7";
         badge.style.color = hasCreds ? "#15803d" : "#b45309";
-        badge.innerText = hasCreds ? "⚡ Supabase Aktif" : "⚠️ Perlu URL & Key";
+        badge.innerText = hasCreds ? "100% Aktif" : "⚠️ Perlu URL & Key";
       }
     } else {
       if (sbSection) sbSection.style.display = "none";
