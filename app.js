@@ -2756,6 +2756,17 @@ function startLiveWorkTimer() {
 
     if (outOfRangeAction) outOfRangeAction.style.display = "none";
 
+    // Pemicu Native Median.co / GoNative Android Location Bridge
+    try {
+      if (typeof median !== "undefined" && median.android && median.android.geoLocation && median.android.geoLocation.promptLocationServices) {
+        median.android.geoLocation.promptLocationServices();
+      } else if (typeof gonative !== "undefined" && gonative.android && gonative.android.geoLocation && gonative.android.geoLocation.promptLocationServices) {
+        gonative.android.geoLocation.promptLocationServices();
+      }
+    } catch (mErr) {
+      console.warn("Median native bridge notice:", mErr);
+    }
+
     if (!navigator.geolocation) {
       showToast("GPS tidak didukung di perangkat ini.", "error");
       if (outOfRangeAction) outOfRangeAction.style.display = "block";
@@ -2763,10 +2774,24 @@ function startLiveWorkTimer() {
     }
 
     if (radarCard) radarCard.className = "radar-box";
-    if (statusText) statusText.innerText = "Mendeteksi posisi GPS presisi...";
-    if (subText) subText.innerText = "Menghubungkan ke satelit & jaringan lokasi...";
+    if (statusText) statusText.innerText = "Mendeteksi posisi GPS...";
+    if (subText) subText.innerText = "Menghubungkan ke satelit & jaringan lokasi ponsel...";
+
+    let isResolved = false;
+    let watchId = null;
+
+    function cleanupWatcher() {
+      if (watchId !== null) {
+        try { navigator.geolocation.clearWatch(watchId); } catch (e) { }
+        watchId = null;
+      }
+    }
 
     function handleSuccess(pos) {
+      if (isResolved) return;
+      isResolved = true;
+      cleanupWatcher();
+
       const lat = pos.coords.latitude;
       const lon = pos.coords.longitude;
       const accuracy = pos.coords.accuracy ? Math.round(pos.coords.accuracy) : null;
@@ -2794,15 +2819,20 @@ function startLiveWorkTimer() {
         AppState.userLocation.isWithinRadius = false;
         if (radarCard) radarCard.className = "radar-box invalid";
         if (statusText) statusText.innerText = "Di Luar Jarak: " + roundedDist + " meter dari kantor";
-        if (subText) subText.innerText = "✕ Batas maksimal " + maxRadius + "m. Anda belum bisa presensi.";
+        if (subText) subText.innerText = "✕ Batas radius kantor maksimal " + maxRadius + "m. Anda belum bisa presensi.";
         if (outOfRangeAction) outOfRangeAction.style.display = "block";
-        document.getElementById("btnSubmitPresensi").disabled = true;
+        const btnSubmit = document.getElementById("btnSubmitPresensi");
+        if (btnSubmit) btnSubmit.disabled = true;
       }
 
       if (onComplete) onComplete(true, roundedDist);
     }
 
     function handleFinalError(err) {
+      if (isResolved) return;
+      isResolved = true;
+      cleanupWatcher();
+
       console.warn("GPS final error:", err);
       if (radarCard) radarCard.className = "radar-box invalid";
       if (err && err.code === 1) { // PERMISSION_DENIED
@@ -2810,13 +2840,13 @@ function startLiveWorkTimer() {
         if (subText) subText.innerText = "Buka Pengaturan HP > Aplikasi > Izin > Aktifkan Lokasi.";
       } else if (err && err.code === 2) { // POSITION_UNAVAILABLE
         if (statusText) statusText.innerText = "Sinyal Lokasi Tidak Tersedia";
-        if (subText) subText.innerText = "Pastikan GPS / Akurasi Lokasi Google di HP Anda menyala.";
+        if (subText) subText.innerText = "Pastikan GPS & Akurasi Lokasi Google di HP menyala.";
       } else if (err && err.code === 3) { // TIMEOUT
         if (statusText) statusText.innerText = "Sinyal GPS Lemah (Timeout)";
-        if (subText) subText.innerText = "Sinyal satelit lambat di dalam ruangan. Klik 'Deteksi Ulang' di bawah.";
+        if (subText) subText.innerText = "Sinyal satelit lambat di dalam ruangan. Klik 'Coba Deteksi Ulang' di bawah.";
       } else {
         if (statusText) statusText.innerText = "Gagal Mengakses GPS";
-        if (subText) subText.innerText = "Pastikan GPS aktif di ponsel Anda.";
+        if (subText) subText.innerText = "Pastikan GPS aktif lalu klik Coba Deteksi Ulang.";
       }
 
       if (outOfRangeAction) outOfRangeAction.style.display = "block";
@@ -2825,28 +2855,52 @@ function startLiveWorkTimer() {
       if (onComplete) onComplete(false, null);
     }
 
-    // Tier 1: Coba GPS Satelit + Cache 30 detik (High Accuracy)
+    // Strategi 1: Coba membaca cache instan atau satelit (timeout 5s)
     navigator.geolocation.getCurrentPosition(
       handleSuccess,
       function (err1) {
-        // Jika izin eksplisit ditolak (code 1), langsung stop ke error
+        if (isResolved) return;
         if (err1 && err1.code === 1) {
           handleFinalError(err1);
           return;
         }
 
-        // Tier 2: Fallback Jaringan / Wi-Fi / Seluler (Indoor Friendly)
-        console.warn("GPS satelit timeout/gagal, otomatis beralih ke sinyal jaringan lokasi...");
-        if (statusText) statusText.innerText = "Menghubungkan via jaringan lokasi...";
-        if (subText) subText.innerText = "Mencoba deteksi lokasi via sinyal seluler/Wi-Fi...";
+        // Strategi 2: Coba membaca via Network/Wi-Fi (Indoor)
+        console.warn("Mencoba fallback network location...");
+        if (statusText) statusText.innerText = "Mencoba sinyal jaringan lokasi...";
+        if (subText) subText.innerText = "Menghubungkan via sinyal seluler/Wi-Fi...";
 
         navigator.geolocation.getCurrentPosition(
           handleSuccess,
-          handleFinalError,
-          { enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 }
+          function (err2) {
+            if (isResolved) return;
+            if (err2 && err2.code === 1) {
+              handleFinalError(err2);
+              return;
+            }
+
+            // Strategi 3: Gunakan watchPosition (mendengarkan stream lokasi Android yang sedang mengunci)
+            console.warn("Mencoba stream watchPosition...");
+            try {
+              watchId = navigator.geolocation.watchPosition(
+                handleSuccess,
+                handleFinalError,
+                { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
+              );
+              // Set timer keselamatan jika watchPosition tidak menghasilkan koordinat dalam 8 detik
+              setTimeout(function () {
+                if (!isResolved) {
+                  handleFinalError(new Error("Timeout GPS"));
+                }
+              }, 8500);
+            } catch (wErr) {
+              handleFinalError(err2);
+            }
+          },
+          { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
         );
       },
-      { enableHighAccuracy: true, timeout: 6000, maximumAge: 30000 }
+      { enableHighAccuracy: true, timeout: 5000, maximumAge: 30000 }
     );
   }
 
