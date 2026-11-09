@@ -2757,59 +2757,96 @@ function startLiveWorkTimer() {
     if (outOfRangeAction) outOfRangeAction.style.display = "none";
 
     if (!navigator.geolocation) {
-      showToast("GPS tidak didukung di browser ini.", "error");
+      showToast("GPS tidak didukung di perangkat ini.", "error");
       if (outOfRangeAction) outOfRangeAction.style.display = "block";
       return;
     }
 
-    statusText.innerText = "Mendeteksi posisi GPS presisi...";
-    subText.innerText = "Pastikan izin lokasi ponsel telah aktif.";
+    if (radarCard) radarCard.className = "radar-box";
+    if (statusText) statusText.innerText = "Mendeteksi posisi GPS presisi...";
+    if (subText) subText.innerText = "Menghubungkan ke satelit & jaringan lokasi...";
 
-    navigator.geolocation.getCurrentPosition(
-      function (pos) {
-        const lat = pos.coords.latitude;
-        const lon = pos.coords.longitude;
-        AppState.userLocation.latitude = lat;
-        AppState.userLocation.longitude = lon;
+    function handleSuccess(pos) {
+      const lat = pos.coords.latitude;
+      const lon = pos.coords.longitude;
+      const accuracy = pos.coords.accuracy ? Math.round(pos.coords.accuracy) : null;
+      AppState.userLocation.latitude = lat;
+      AppState.userLocation.longitude = lon;
 
-        const dist = calculateClientHaversine(
-          lat, lon,
-          AppState.currentConfig.LATITUDE_KANTOR,
-          AppState.currentConfig.LONGITUDE_KANTOR
-        );
-        const roundedDist = Math.round(dist * 10) / 10;
-        AppState.userLocation.distanceMeter = roundedDist;
+      const dist = calculateClientHaversine(
+        lat, lon,
+        AppState.currentConfig.LATITUDE_KANTOR,
+        AppState.currentConfig.LONGITUDE_KANTOR
+      );
+      const roundedDist = Math.round(dist * 10) / 10;
+      AppState.userLocation.distanceMeter = roundedDist;
 
-        const maxRadius = AppState.currentConfig.RADIUS_MAKSIMAL_METER || 50;
+      const maxRadius = AppState.currentConfig.RADIUS_MAKSIMAL_METER || 50;
 
-        if (roundedDist <= maxRadius) {
-          AppState.userLocation.isWithinRadius = true;
-          radarCard.className = "radar-box valid";
-          statusText.innerText = "Lokasi Valid: " + roundedDist + " meter dari kantor";
-          subText.innerText = "✓ Anda berada dalam batas radius maksimal " + maxRadius + "m.";
-          if (outOfRangeAction) outOfRangeAction.style.display = "none";
-          checkIfReadyToSubmit();
-        } else {
-          AppState.userLocation.isWithinRadius = false;
-          radarCard.className = "radar-box invalid";
-          statusText.innerText = "Di Luar Jarak: " + roundedDist + " meter dari kantor";
-          subText.innerText = "✕ Maksimal " + maxRadius + "m. Anda belum bisa presensi.";
-          if (outOfRangeAction) outOfRangeAction.style.display = "block";
-          document.getElementById("btnSubmitPresensi").disabled = true;
-        }
-
-        if (onComplete) onComplete(true, roundedDist);
-      },
-      function (err) {
-        console.warn("GPS error:", err);
-        radarCard.className = "radar-box invalid";
-        statusText.innerText = "Gagal Mengakses GPS";
-        subText.innerText = "Silakan izinkan akses lokasi di pengaturan browser ponsel Anda.";
+      if (roundedDist <= maxRadius) {
+        AppState.userLocation.isWithinRadius = true;
+        if (radarCard) radarCard.className = "radar-box valid";
+        if (statusText) statusText.innerText = "Lokasi Valid: " + roundedDist + " meter dari kantor";
+        if (subText) subText.innerText = "✓ Anda berada dalam batas radius maksimal " + maxRadius + "m" + (accuracy ? " (Akurasi: ±" + accuracy + "m)" : "") + ".";
+        if (outOfRangeAction) outOfRangeAction.style.display = "none";
+        checkIfReadyToSubmit();
+      } else {
+        AppState.userLocation.isWithinRadius = false;
+        if (radarCard) radarCard.className = "radar-box invalid";
+        if (statusText) statusText.innerText = "Di Luar Jarak: " + roundedDist + " meter dari kantor";
+        if (subText) subText.innerText = "✕ Batas maksimal " + maxRadius + "m. Anda belum bisa presensi.";
         if (outOfRangeAction) outOfRangeAction.style.display = "block";
         document.getElementById("btnSubmitPresensi").disabled = true;
-        if (onComplete) onComplete(false, null);
+      }
+
+      if (onComplete) onComplete(true, roundedDist);
+    }
+
+    function handleFinalError(err) {
+      console.warn("GPS final error:", err);
+      if (radarCard) radarCard.className = "radar-box invalid";
+      if (err && err.code === 1) { // PERMISSION_DENIED
+        if (statusText) statusText.innerText = "Izin Lokasi Belum Aktif";
+        if (subText) subText.innerText = "Buka Pengaturan HP > Aplikasi > Izin > Aktifkan Lokasi.";
+      } else if (err && err.code === 2) { // POSITION_UNAVAILABLE
+        if (statusText) statusText.innerText = "Sinyal Lokasi Tidak Tersedia";
+        if (subText) subText.innerText = "Pastikan GPS / Akurasi Lokasi Google di HP Anda menyala.";
+      } else if (err && err.code === 3) { // TIMEOUT
+        if (statusText) statusText.innerText = "Sinyal GPS Lemah (Timeout)";
+        if (subText) subText.innerText = "Sinyal satelit lambat di dalam ruangan. Klik 'Deteksi Ulang' di bawah.";
+      } else {
+        if (statusText) statusText.innerText = "Gagal Mengakses GPS";
+        if (subText) subText.innerText = "Pastikan GPS aktif di ponsel Anda.";
+      }
+
+      if (outOfRangeAction) outOfRangeAction.style.display = "block";
+      const btnSubmit = document.getElementById("btnSubmitPresensi");
+      if (btnSubmit) btnSubmit.disabled = true;
+      if (onComplete) onComplete(false, null);
+    }
+
+    // Tier 1: Coba GPS Satelit + Cache 30 detik (High Accuracy)
+    navigator.geolocation.getCurrentPosition(
+      handleSuccess,
+      function (err1) {
+        // Jika izin eksplisit ditolak (code 1), langsung stop ke error
+        if (err1 && err1.code === 1) {
+          handleFinalError(err1);
+          return;
+        }
+
+        // Tier 2: Fallback Jaringan / Wi-Fi / Seluler (Indoor Friendly)
+        console.warn("GPS satelit timeout/gagal, otomatis beralih ke sinyal jaringan lokasi...");
+        if (statusText) statusText.innerText = "Menghubungkan via jaringan lokasi...";
+        if (subText) subText.innerText = "Mencoba deteksi lokasi via sinyal seluler/Wi-Fi...";
+
+        navigator.geolocation.getCurrentPosition(
+          handleSuccess,
+          handleFinalError,
+          { enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 }
+        );
       },
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 6000, maximumAge: 30000 }
     );
   }
 

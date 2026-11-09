@@ -696,10 +696,15 @@
             <div class="radar-status" id="gpsStatusText">Mendeteksi GPS...</div>
             <div class="radar-sub" id="gpsDistanceSub">Memeriksa radius ke lokasi kantor...</div>
             <!-- Tombol Pintas Atur Lokasi Kantor saat Di Luar Jarak -->
-            <div id="gpsOutOfRangeAction" style="display: none; margin-top: 4px;">
-              <button type="button" class="btn-pin-shortcut" onclick="openMapPickerModal()">
-                📍 Pilih / Set Lokasi Kantor di Peta
-              </button>
+            <div id="gpsOutOfRangeAction" style="display: none; margin-top: 6px;">
+              <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                <button type="button" class="btn-pin-shortcut" id="btnRetryGps" onclick="triggerGpsDetection()" style="background: #15803d; color: #ffffff; border-color: #166534;">
+                  🔄 Coba Deteksi Ulang
+                </button>
+                <button type="button" class="btn-pin-shortcut" onclick="openMapPickerModal()">
+                  📍 Pilih / Set Lokasi Kantor di Peta
+                </button>
+              </div>
             </div>
           </div>
         </div>
