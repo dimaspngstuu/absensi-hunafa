@@ -527,22 +527,63 @@ if (typeof google === "undefined" || !google.script || !google.script.run) {
 
         if (action === "submitIzin") {
           let proofUrl = "-";
-          if (payload.buktiPhoto) {
-            proofUrl = await uploadBase64ToSupabaseStorage(client, payload.buktiPhoto, "bukti_" + payload.idKaryawan);
+          if (payload.buktiPhoto && payload.buktiPhoto !== "-" && typeof payload.buktiPhoto === "string" && payload.buktiPhoto.includes("base64,")) {
+            try {
+              proofUrl = await uploadBase64ToSupabaseStorage(client, payload.buktiPhoto, "bukti_" + (payload.idKaryawan || "emp"));
+            } catch (upErr) {
+              console.warn("Storage upload notice (defaulted to '-'):", upErr);
+              proofUrl = "-";
+            }
           }
+
+          // Universal Employee Resolver (Pastikan ID Karyawan terdaftar di Supabase)
+          let validIdKaryawan = payload.idKaryawan || (AppState.currentUser ? AppState.currentUser.idKaryawan : "");
+          let namaPegawai = AppState.currentUser ? AppState.currentUser.nama : "Pegawai";
+
+          if (client) {
+            try {
+              const { data: kRow } = await client.from("karyawan")
+                .select("id, nama")
+                .or("id.eq." + validIdKaryawan + ",nip.eq." + validIdKaryawan)
+                .maybeSingle();
+
+              if (kRow && kRow.id) {
+                validIdKaryawan = kRow.id;
+                if (kRow.nama) namaPegawai = kRow.nama;
+              } else if (AppState.currentUser && AppState.currentUser.nama) {
+                const { data: kByName } = await client.from("karyawan")
+                  .select("id, nama")
+                  .ilike("nama", "%" + AppState.currentUser.nama + "%")
+                  .maybeSingle();
+                if (kByName && kByName.id) {
+                  validIdKaryawan = kByName.id;
+                  namaPegawai = kByName.nama;
+                }
+              }
+            } catch (lookupErr) {
+              console.warn("Employee resolver notice:", lookupErr);
+            }
+          }
+
           const izinId = "IZIN-" + Date.now();
+          const tglMulaiClean = String(payload.tglMulai || getJakartaDateString()).trim();
+          const tglSelesaiClean = String(payload.tglSelesai || tglMulaiClean).trim();
+
           const { error: izErr } = await client.from("pengajuan_izin").insert({
             id: izinId,
-            id_karyawan: payload.idKaryawan,
-            nama_karyawan: AppState.currentUser ? AppState.currentUser.nama : "Pegawai",
+            id_karyawan: validIdKaryawan,
+            nama_karyawan: namaPegawai,
             jenis: payload.jenis,
-            tgl_mulai: payload.tglMulai,
-            tgl_selesai: payload.tglSelesai || payload.tglMulai,
-            alasan: payload.alasan,
-            bukti_url: proofUrl,
+            tgl_mulai: tglMulaiClean,
+            tgl_selesai: tglSelesaiClean,
+            alasan: payload.alasan || "(Tanpa keterangan)",
+            bukti_url: proofUrl || "-",
             status: "Menunggu"
           });
-          if (izErr) throw izErr;
+          if (izErr) {
+            console.error("Supabase insert pengajuan_izin error:", izErr);
+            throw izErr;
+          }
           return successCb({ success: true, message: "Pengajuan " + payload.jenis + " berhasil dikirim!" });
         }
 
@@ -580,6 +621,19 @@ if (typeof google === "undefined" || !google.script || !google.script.run) {
           let q = client.from("presensi").select("*").order("tanggal", { ascending: true });
           if (payload.startDate) q = q.gte("tanggal", payload.startDate);
           if (payload.endDate) q = q.lte("tanggal", payload.endDate);
+
+          const isAdmin = AppState.currentUser && AppState.currentUser.role === "Admin";
+          if (!isAdmin && AppState.currentUser) {
+            // Pegawai biasa (seperti Adam Mumtaz, Cecep, dll.) hanya boleh melihat riwayat dirinya sendiri
+            const myId = AppState.currentUser.idKaryawan;
+            const myNip = AppState.currentUser.nip;
+            if (myId && myNip) {
+              q = q.or("id_karyawan.eq." + myId + ",id_karyawan.eq." + myNip);
+            } else if (myId) {
+              q = q.eq("id_karyawan", myId);
+            }
+          }
+
           const { data: repData, error: repErr } = await q;
           if (repErr) throw repErr;
 
@@ -867,7 +921,7 @@ const AppState = {
  */
 let idleTimer = null;
 let lastActivityResetTime = 0;
-const IDLE_LIMIT_MS = 3 * 60 * 1000; // 3 Menit = 180.000 ms
+const IDLE_LIMIT_MS = 10 * 60 * 1000; // 10 Menit = 600.000 ms
 
 function resetIdleTimer() {
   const now = Date.now();
@@ -888,7 +942,7 @@ function resetIdleTimer() {
 function triggerIdleAutoLogout() {
   if (!AppState.sessionToken && !AppState.currentUser) return;
 
-  console.warn("User inaktif selama 3 menit. Memulai logout otomatis.");
+  console.warn("User inaktif selama 10 menit. Memulai logout otomatis.");
   const token = AppState.sessionToken;
   if (token && typeof google !== "undefined" && google.script && google.script.run) {
     try { google.script.run.apiLogout(token); } catch (e) { }
@@ -906,7 +960,7 @@ function triggerIdleAutoLogout() {
   if (pwdModal) pwdModal.classList.remove("open");
 
   openLoginModal();
-  showToast("Sesi berakhir: Tidak ada pergerakan selama 3 menit. Silakan login kembali.", "error");
+  showToast("Sesi berakhir: Tidak ada pergerakan selama 10 menit. Silakan login kembali.", "error");
 }
 
 function initIdleSessionTracker() {
@@ -3185,6 +3239,7 @@ function startLiveWorkTimer() {
 
   function handleLeaveTypeChange(val) {
     const lblStartDate = document.getElementById("lblStartDate");
+    const lblEndDate = document.getElementById("lblEndDate");
     const groupEndDate = document.getElementById("groupEndDate");
     const overtimeSection = document.getElementById("overtimeHoursSection");
     const lblReason = document.getElementById("lblReason");
@@ -3194,10 +3249,10 @@ function startLiveWorkTimer() {
     const btnSubmit = document.getElementById("btnSubmitLeave");
 
     if (val === "Lembur") {
+      // Lembur / Tugas Tambahan (Hitungan Per Jam)
       if (lblStartDate) lblStartDate.innerText = "Tanggal Lembur";
       if (groupEndDate) groupEndDate.style.display = "none";
 
-      // 👇 KUNCI PERBAIKAN: Matikan syarat wajib tanggal selesai agar browser tidak memblokir:
       const endInput = document.getElementById("leaveEndDate");
       if (endInput) {
         endInput.required = false;
@@ -3210,15 +3265,31 @@ function startLiveWorkTimer() {
         calculateOvertimeHours();
       }
       if (lblReason) lblReason.innerText = "Keterangan / Rincian Tugas Lembur";
-      if (leaveReason) leaveReason.placeholder = "Jelaskan rincian tugas lembur (misal: Persiapan PPDB, Piket Acara Malam s/d 20:00)...";
+      if (leaveReason) leaveReason.placeholder = "Jelaskan rincian tugas lembur (misal: Piket Malam, Persiapan Acara)...";
       if (lblProof) lblProof.innerText = "Lampiran Bukti (Surat Tugas / Foto Kegiatan Lembur)";
       if (promptTitle) promptTitle.innerText = "Pilih Foto Surat Tugas / Foto Kegiatan";
-      if (btnSubmit) btnSubmit.innerText = "Kirim Pengajuan Lembur";
-    } else {
-      if (lblStartDate) lblStartDate.innerText = "Tanggal Mulai";
+      if (btnSubmit) btnSubmit.innerText = "Kirim Pengajuan Lembur (Per Jam)";
+    } else if (val === "Lembur Kedinasan") {
+      // Lembur Kedinasan (Hitungan Harian - Ganti Cuti Tahunan)
+      if (lblStartDate) lblStartDate.innerText = "Tanggal Mulai Dinas";
+      if (lblEndDate) lblEndDate.innerText = "Tanggal Selesai Dinas";
       if (groupEndDate) groupEndDate.style.display = "block";
 
-      // 👇 Kembalikan wajib diisi jika memilih Izin/Sakit/Cuti:
+      const endInput = document.getElementById("leaveEndDate");
+      if (endInput) endInput.required = true;
+
+      if (overtimeSection) overtimeSection.style.display = "none";
+      if (lblReason) lblReason.innerText = "Keterangan / Rincian Tugas Lembur Kedinasan";
+      if (leaveReason) leaveReason.placeholder = "Jelaskan rincian tugas dinas (misal: Pengawasan Ujian, Kegiatan Studi Tour Luar Kota, Pelatihan)...";
+      if (lblProof) lblProof.innerText = "Lampiran Bukti (Surat Tugas Dinas / Dokumentasi)";
+      if (promptTitle) promptTitle.innerText = "Pilih Foto Surat Tugas / Dokumentasi Dinas";
+      if (btnSubmit) btnSubmit.innerText = "Kirim Pengajuan Lembur Kedinasan";
+    } else {
+      // Sakit atau Izin
+      if (lblStartDate) lblStartDate.innerText = "Tanggal Mulai";
+      if (lblEndDate) lblEndDate.innerText = "Tanggal Selesai";
+      if (groupEndDate) groupEndDate.style.display = "block";
+
       const endInput = document.getElementById("leaveEndDate");
       if (endInput) endInput.required = true;
 
@@ -3283,7 +3354,7 @@ function startLiveWorkTimer() {
       displayList.forEach(function (item) {
         let pillClass = "pill-izin";
         if (item.jenis === "Sakit") pillClass = "pill-sakit";
-        if (item.jenis === "Cuti") pillClass = "pill-cuti";
+        if (item.jenis === "Cuti" || item.jenis === "Lembur Kedinasan") pillClass = "pill-dinas";
         if (item.jenis === "Lembur") pillClass = "pill-lembur";
 
         let statusBadge = "";
@@ -3429,7 +3500,7 @@ function startLiveWorkTimer() {
       data.forEach(function (item) {
         let pillClass = "pill-izin";
         if (item.jenis === "Sakit") pillClass = "pill-sakit";
-        if (item.jenis === "Cuti") pillClass = "pill-cuti";
+        if (item.jenis === "Cuti" || item.jenis === "Lembur Kedinasan") pillClass = "pill-dinas";
         if (item.jenis === "Lembur") pillClass = "pill-lembur";
 
         let statusBadge = "";
@@ -3519,6 +3590,12 @@ function startLiveWorkTimer() {
         return;
       }
       alasan = "[⏰ " + ot.startTime + " - " + ot.endTime + " WIB • Total " + ot.decimalHours + " Jam] " + alasan;
+    } else if (jenis === "Lembur Kedinasan") {
+      if (!tglSelesai) tglSelesai = tglMulai;
+      if (tglSelesai < tglMulai) {
+        showToast("Tanggal selesai tidak boleh lebih awal dari tanggal mulai.", "error");
+        return;
+      }
     }
 
     if (submitBtn) {
